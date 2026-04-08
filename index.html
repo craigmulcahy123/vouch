@@ -1,19 +1,2256 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Vouch</title>
-    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="text/babel" src="testimonial-app.jsx"></script>
-    <script type="text/babel">
-      const root = ReactDOM.createRoot(document.getElementById('root'));
-      root.render(React.createElement(App));
-    </script>
-  </body>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vouch — Video Testimonials</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone@7.23.4/babel.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: sans-serif; }
+    #root { min-height: 100vh; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel" data-type="module">
+    const { useState, useRef, useEffect } = React;
+
+
+const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
+
+// ── Firebase config ───────────────────────────────────────────────────────────
+// Replace these values with your own from Firebase Console →
+// Project Settings → General → Your apps → Firebase SDK snippet → Config
+const FIREBASE_CONFIG = {
+  apiKey:            "YOUR_API_KEY",
+  authDomain:        "YOUR_PROJECT.firebaseapp.com",
+  projectId:         "YOUR_PROJECT_ID",
+  storageBucket:     "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId:             "YOUR_APP_ID",
+};
+
+// ── Lazy Firebase loader ──────────────────────────────────────────────────────
+// Loads Firebase from CDN so no bundler/npm needed in this artifact context.
+let _auth = null;
+let _storage = null;
+let _fbReady = false;
+let _fbCallbacks = [];
+
+function onFirebaseReady(cb) {
+  if (_fbReady) { cb(_auth, _storage); return; }
+  _fbCallbacks.push(cb);
+}
+
+function initFirebase() {
+  if (typeof window.__firebaseLoading !== "undefined") return;
+  window.__firebaseLoading = true;
+
+  function load(src) {
+    return new Promise(res => {
+      const s = document.createElement("script");
+      s.src = src; s.onload = res;
+      document.head.appendChild(s);
+    });
+  }
+
+  Promise.all([
+    load("https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"),
+    load("https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"),
+    load("https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"),
+  ]).then(() => {
+    if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+    _auth = firebase.auth();
+    _storage = firebase.storage();
+    _fbReady = true;
+    _fbCallbacks.forEach(cb => cb(_auth, _storage));
+    _fbCallbacks = [];
+  });
+}
+
+// ── Auth helpers ──────────────────────────────────────────────────────────────
+function useAuth() {
+  const [user, setUser] = useState(undefined); // undefined = loading
+  const [auth, setAuth] = useState(null);
+  const [storage, setStorage] = useState(null);
+
+  useEffect(() => {
+    initFirebase();
+    onFirebaseReady((a, s) => {
+      setAuth(a);
+      setStorage(s);
+      a.onAuthStateChanged(u => setUser(u || null));
+    });
+  }, []);
+
+  return { user, auth, storage, loading: user === undefined };
+}
+
+async function signUp(auth, email, password) {
+  return auth.createUserWithEmailAndPassword(email, password);
+}
+
+async function signIn(auth, email, password) {
+  return auth.signInWithEmailAndPassword(email, password);
+}
+
+async function sendPasswordReset(auth, email) {
+  return auth.sendPasswordResetEmail(email);
+}
+
+async function signOut(auth) {
+  return auth.signOut();
+}
+
+// ── Firebase error → human message ───────────────────────────────────────────
+function friendlyAuthError(code) {
+  const map = {
+    "auth/email-already-in-use": "An account with this email already exists.",
+    "auth/invalid-email": "Please enter a valid email address.",
+    "auth/weak-password": "Password must be at least 6 characters.",
+    "auth/user-not-found": "No account found with this email.",
+    "auth/wrong-password": "Incorrect password. Try again.",
+    "auth/too-many-requests": "Too many attempts. Please wait a moment and try again.",
+    "auth/invalid-credential": "Email or password is incorrect.",
+  };
+  return map[code] || "Something went wrong. Please try again.";
+}
+
+// ── Firebase Storage — upload video blobs ────────────────────────────────────
+// videoBlobs: { [promptIndex]: Blob }
+// onProgress: (promptIndex, pct) => void
+// Returns: { [promptIndex]: downloadURL }
+async function uploadVideos({ storage, userId, campaignId, videoBlobs, onProgress }) {
+  if (!storage) throw new Error("Firebase Storage not initialised");
+  const timestamp = Date.now();
+  const entries = Object.entries(videoBlobs);
+
+  const urls = {};
+  await Promise.all(
+    entries.map(([idx, blob]) =>
+      new Promise((resolve, reject) => {
+        const path = `testimonials/${userId}/${campaignId}/${timestamp}/q${idx}.webm`;
+        const ref = storage.ref(path);
+        const task = ref.put(blob, { contentType: "video/webm" });
+
+        task.on(
+          "state_changed",
+          snap => {
+            const pct = Math.round((snap.bytesTransferred / snap.totalBytes) * 100);
+            onProgress(Number(idx), pct);
+          },
+          reject,
+          async () => {
+            urls[idx] = await task.snapshot.ref.getDownloadURL();
+            resolve();
+          }
+        );
+      })
+    )
+  );
+  return urls;
+}
+const style = `
+  @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  /* ── Video Editor ── */
+  .editor-overlay {
+    position: fixed; inset: 0; background: #0a0a0a; z-index: 400;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .editor-nav {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 28px; border-bottom: 1px solid #1e1e1e; flex-shrink: 0;
+  }
+  .editor-title { font-family: 'Instrument Serif', serif; font-size: 1.1rem; color: #fff; }
+  .editor-body {
+    display: grid; grid-template-columns: 1fr 340px;
+    flex: 1; overflow: hidden; min-height: 0;
+  }
+  .editor-main { display: flex; flex-direction: column; padding: 24px; gap: 20px; overflow-y: auto; }
+  .editor-sidebar { border-left: 1px solid #1e1e1e; display: flex; flex-direction: column; overflow-y: auto; }
+  .editor-sidebar-section { padding: 20px 22px; border-bottom: 1px solid #1e1e1e; }
+  .editor-sidebar-label { font-size: 0.72rem; font-weight: 700; color: #555; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 14px; }
+
+  /* Canvas preview */
+  .canvas-wrap { position: relative; background: #000; border-radius: 12px; overflow: hidden; aspect-ratio: 9/16; max-height: 420px; align-self: center; }
+  .canvas-wrap canvas { width: 100%; height: 100%; display: block; }
+  .canvas-wrap video { display: none; }
+
+  /* Clip tabs */
+  .clip-strip { display: flex; gap: 8px; flex-wrap: wrap; }
+  .clip-pill {
+    padding: 6px 14px; border-radius: 20px; border: 1px solid #2a2a2a;
+    background: #111; color: #888; font-size: 0.8rem; cursor: pointer;
+    font-family: 'DM Sans', sans-serif; transition: all 0.15s;
+  }
+  .clip-pill.active { background: var(--gold); border-color: var(--gold); color: #fff; }
+  .clip-pill.generating { border-color: #333; color: #555; cursor: default; }
+
+  /* Caption editor */
+  .caption-list { display: flex; flex-direction: column; gap: 8px; }
+  .caption-row {
+    display: flex; gap: 10px; align-items: flex-start;
+    background: #111; border: 1px solid #1e1e1e; border-radius: 8px; padding: 10px 12px;
+    cursor: pointer; transition: border-color 0.15s;
+  }
+  .caption-row.active { border-color: var(--gold); }
+  .caption-time { font-size: 0.72rem; color: #555; font-family: monospace; min-width: 44px; margin-top: 2px; }
+  .caption-text-input {
+    flex: 1; background: transparent; border: none; outline: none;
+    font-family: 'DM Sans', sans-serif; font-size: 0.88rem; color: #ccc; resize: none; line-height: 1.4;
+  }
+
+  /* Branding fields */
+  .brand-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+  .brand-label { font-size: 0.78rem; color: #666; }
+  .brand-input {
+    background: #111; border: 1px solid #2a2a2a; border-radius: 7px;
+    padding: 8px 12px; color: #fff; font-family: 'DM Sans', sans-serif; font-size: 0.88rem;
+    outline: none; width: 100%; transition: border-color 0.15s;
+  }
+  .brand-input:focus { border-color: var(--gold); }
+  .color-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .color-swatch {
+    width: 28px; height: 28px; border-radius: 50%; cursor: pointer;
+    border: 2px solid transparent; transition: all 0.15s; flex-shrink: 0;
+  }
+  .color-swatch.active { border-color: #fff; transform: scale(1.15); }
+
+  /* Export button */
+  .export-btn {
+    margin: 0 22px 22px; padding: 13px; border-radius: 10px; background: var(--gold);
+    border: none; color: #fff; font-family: 'DM Sans', sans-serif; font-weight: 700;
+    font-size: 0.9rem; cursor: pointer; width: calc(100% - 44px); transition: all 0.2s;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .export-btn:hover { background: #b8993e; }
+  .export-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  @media (max-width: 800px) {
+    .editor-body { grid-template-columns: 1fr; }
+    .editor-sidebar { border-left: none; border-top: 1px solid #1e1e1e; }
+  }
+
+  /* ── Prompt templates ── */
+  .template-grid { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+  .template-chip {
+    padding: 7px 14px; border-radius: 20px; border: 1.5px solid var(--border);
+    background: var(--paper); font-family: 'DM Sans', sans-serif; font-size: 0.82rem;
+    color: var(--muted); cursor: pointer; transition: all 0.15s; display: flex; align-items: center; gap: 6px;
+  }
+  .template-chip:hover { border-color: var(--gold); color: var(--ink); }
+  .template-chip.active { border-color: var(--gold); background: #fdf6e8; color: var(--ink); font-weight: 600; }
+
+  /* ── Upload progress ── */
+  .upload-progress { margin-bottom: 20px; }
+  .upload-row { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+  .upload-label { font-size: 0.82rem; color: #888; width: 60px; flex-shrink: 0; }
+  .progress-track { flex: 1; height: 6px; background: #222; border-radius: 99px; overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 99px; background: var(--gold); transition: width 0.25s ease; }
+  .progress-pct { font-size: 0.75rem; color: #666; width: 34px; text-align: right; flex-shrink: 0; }
+
+  /* ── Video playback modal ── */
+  .video-modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.88); z-index: 300;
+    display: flex; align-items: center; justify-content: center; padding: 24px;
+  }
+  .video-modal {
+    background: #111; border-radius: 16px; padding: 28px; max-width: 700px; width: 100%;
+    animation: modalIn 0.2s ease;
+  }
+  .video-modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  .video-modal-title { font-family: 'Instrument Serif', serif; font-size: 1.2rem; color: #fff; }
+  .video-modal video { width: 100%; border-radius: 10px; background: #000; display: block; }
+  .video-clip-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .video-clip-tab {
+    padding: 6px 14px; border-radius: 20px; border: 1px solid #333;
+    background: transparent; color: #888; font-size: 0.8rem; cursor: pointer;
+    font-family: 'DM Sans', sans-serif; transition: all 0.15s;
+  }
+  .video-clip-tab.active { background: var(--gold); border-color: var(--gold); color: #fff; }
+
+  :root {
+    --ink: #0e0e0e;
+    --paper: #f5f0e8;
+    --cream: #ede8dc;
+    --gold: #c8a96e;
+    --gold-light: #e8d5a3;
+    --rust: #b85c38;
+    --sage: #5a6e5a;
+    --muted: #7a7060;
+    --card: #faf7f2;
+    --border: #ddd8cc;
+    --shadow: 0 2px 16px rgba(14,14,14,0.08);
+    --shadow-lg: 0 8px 40px rgba(14,14,14,0.14);
+  }
+
+  body { font-family: 'DM Sans', sans-serif; background: var(--paper); color: var(--ink); min-height: 100vh; }
+
+  .serif { font-family: 'Instrument Serif', serif; }
+  .italic { font-style: italic; }
+
+  /* ── Layout ── */
+  .app { min-height: 100vh; display: flex; flex-direction: column; }
+
+  /* ── Nav ── */
+  .nav {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 40px; border-bottom: 1px solid var(--border);
+    background: var(--paper); position: sticky; top: 0; z-index: 100;
+  }
+  .nav-logo { font-family: 'Instrument Serif', serif; font-size: 1.5rem; letter-spacing: -0.02em; }
+  .nav-logo span { color: var(--gold); font-style: italic; }
+  .nav-tabs { display: flex; gap: 4px; background: var(--cream); border-radius: 10px; padding: 4px; }
+  .nav-tab {
+    padding: 7px 18px; border-radius: 7px; border: none; background: transparent;
+    font-family: 'DM Sans', sans-serif; font-size: 0.85rem; font-weight: 500;
+    color: var(--muted); cursor: pointer; transition: all 0.2s;
+  }
+  .nav-tab.active { background: var(--ink); color: #fff; }
+
+  /* ── Dashboard ── */
+  .dashboard { padding: 48px 40px; max-width: 1100px; margin: 0 auto; width: 100%; }
+  .dash-header { margin-bottom: 40px; }
+  .dash-title { font-family: 'Instrument Serif', serif; font-size: 2.8rem; line-height: 1.1; margin-bottom: 8px; }
+  .dash-subtitle { color: var(--muted); font-size: 0.95rem; }
+
+  /* Stats row */
+  .stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 40px; }
+  .stat-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+    padding: 24px 28px;
+  }
+  .stat-num { font-family: 'Instrument Serif', serif; font-size: 2.6rem; line-height: 1; margin-bottom: 4px; }
+  .stat-label { color: var(--muted); font-size: 0.82rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em; }
+
+  /* Campaign creator */
+  .section-title { font-family: 'Instrument Serif', serif; font-size: 1.5rem; margin-bottom: 20px; }
+  .campaign-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 16px;
+    padding: 32px; margin-bottom: 32px;
+  }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { font-size: 0.82rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+  .field input, .field textarea, .field select {
+    padding: 11px 14px; border: 1.5px solid var(--border); border-radius: 9px;
+    background: var(--paper); font-family: 'DM Sans', sans-serif; font-size: 0.92rem;
+    color: var(--ink); outline: none; transition: border-color 0.2s;
+    resize: vertical;
+  }
+  .field input:focus, .field textarea:focus { border-color: var(--gold); }
+
+  .btn {
+    padding: 11px 24px; border-radius: 9px; border: none; cursor: pointer;
+    font-family: 'DM Sans', sans-serif; font-weight: 600; font-size: 0.9rem;
+    transition: all 0.2s; display: inline-flex; align-items: center; gap: 8px;
+  }
+  .btn-primary { background: var(--ink); color: #fff; }
+  .btn-primary:hover { background: #2a2a2a; transform: translateY(-1px); box-shadow: var(--shadow); }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+  .btn-gold { background: var(--gold); color: #fff; }
+  .btn-gold:hover { background: #b8993e; }
+  .btn-outline { background: transparent; color: var(--ink); border: 1.5px solid var(--border); }
+  .btn-outline:hover { border-color: var(--ink); }
+  .btn-sm { padding: 7px 14px; font-size: 0.82rem; }
+  .btn-rust { background: var(--rust); color: #fff; }
+
+  .prompts-box {
+    background: var(--cream); border: 1px solid var(--border); border-radius: 10px;
+    padding: 20px 24px; margin-top: 16px;
+  }
+  .prompt-item {
+    display: flex; align-items: flex-start; gap: 12px; padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .prompt-item:last-child { border-bottom: none; }
+  .prompt-num {
+    width: 24px; height: 24px; border-radius: 50%; background: var(--gold);
+    color: #fff; font-size: 0.75rem; font-weight: 700; display: flex;
+    align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px;
+  }
+  .prompt-text { font-size: 0.9rem; line-height: 1.5; flex: 1; }
+  .prompt-text input {
+    width: 100%; border: none; background: transparent; font-family: 'DM Sans', sans-serif;
+    font-size: 0.9rem; color: var(--ink); outline: none; padding: 0;
+  }
+
+  .link-box {
+    display: flex; align-items: center; gap: 12px; padding: 14px 18px;
+    background: var(--cream); border: 1px solid var(--border); border-radius: 10px;
+    margin-top: 16px;
+  }
+  .link-url { font-size: 0.85rem; color: var(--muted); flex: 1; font-family: monospace; }
+  
+  /* Testimonials list */
+  .testimonials-grid { display: grid; gap: 16px; }
+  .testimonial-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+    padding: 24px 28px; display: grid; grid-template-columns: 1fr auto; gap: 16px;
+    align-items: start;
+  }
+  .t-name { font-weight: 600; margin-bottom: 4px; }
+  .t-company { color: var(--muted); font-size: 0.82rem; margin-bottom: 12px; }
+  .t-quote { font-family: 'Instrument Serif', serif; font-size: 1.05rem; font-style: italic; line-height: 1.5; color: #333; }
+  .t-stars { color: var(--gold); font-size: 1rem; margin-bottom: 8px; }
+  .badge {
+    padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .badge-new { background: #e8f4e8; color: var(--sage); }
+  .badge-approved { background: #e8f0e8; color: #3a5a3a; }
+  .badge-pending { background: #f4ede8; color: var(--rust); }
+
+  .loading-dots::after {
+    content: ''; animation: dots 1.2s steps(4, end) infinite;
+  }
+  @keyframes dots {
+    0%, 20% { content: ''; }
+    40% { content: '.'; }
+    60% { content: '..'; }
+    80%, 100% { content: '...'; }
+  }
+
+  /* ── Client Recording Page ── */
+  .client-page {
+    min-height: 100vh; background: var(--ink); color: #fff;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 60px 24px;
+  }
+  .client-logo { font-family: 'Instrument Serif', serif; font-size: 1.3rem; color: var(--gold); margin-bottom: 48px; font-style: italic; }
+  .client-card {
+    background: #1a1a1a; border: 1px solid #333; border-radius: 20px;
+    padding: 40px; max-width: 640px; width: 100%;
+  }
+  .client-step { color: var(--gold); font-size: 0.78rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 12px; }
+  .client-title { font-family: 'Instrument Serif', serif; font-size: 2rem; line-height: 1.2; margin-bottom: 8px; }
+  .client-sub { color: #888; font-size: 0.9rem; margin-bottom: 32px; line-height: 1.6; }
+
+  .prompt-card {
+    background: #111; border: 1px solid #2a2a2a; border-radius: 12px;
+    padding: 20px 24px; margin-bottom: 12px; cursor: pointer; transition: all 0.2s;
+    display: flex; align-items: flex-start; gap: 14px;
+  }
+  .prompt-card:hover { border-color: var(--gold); }
+  .prompt-card.selected { border-color: var(--gold); background: #1c1810; }
+  .prompt-q { font-size: 0.95rem; line-height: 1.5; }
+
+  .video-area {
+    background: #111; border: 1px solid #2a2a2a; border-radius: 14px;
+    aspect-ratio: 16/9; width: 100%; display: flex; align-items: center;
+    justify-content: center; overflow: hidden; position: relative; margin-bottom: 20px;
+  }
+  .video-area video { width: 100%; height: 100%; object-fit: cover; border-radius: 14px; }
+  .video-placeholder { text-align: center; color: #555; }
+  .video-icon { font-size: 2.5rem; margin-bottom: 8px; }
+  .video-hint { font-size: 0.85rem; }
+
+  .rec-controls { display: flex; gap: 12px; justify-content: center; margin-bottom: 24px; }
+  .rec-btn {
+    width: 56px; height: 56px; border-radius: 50%; border: none; cursor: pointer;
+    font-size: 1.3rem; display: flex; align-items: center; justify-content: center;
+    transition: all 0.2s;
+  }
+  .rec-btn-record { background: var(--rust); color: #fff; }
+  .rec-btn-record:hover { transform: scale(1.08); }
+  .rec-btn-stop { background: #444; color: #fff; }
+  .rec-btn-stop:hover { background: #555; }
+  .rec-indicator { display: flex; align-items: center; gap: 8px; color: var(--rust); font-size: 0.82rem; font-weight: 600; }
+  .rec-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--rust); animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.3; } }
+
+  .text-response-area {
+    background: #111; border: 1px solid #2a2a2a; border-radius: 12px;
+    padding: 20px; margin-bottom: 20px;
+  }
+  .text-response-area textarea {
+    width: 100%; background: transparent; border: none; outline: none;
+    color: #fff; font-family: 'DM Sans', sans-serif; font-size: 0.95rem;
+    line-height: 1.6; resize: none; min-height: 120px;
+  }
+  .text-response-area textarea::placeholder { color: #444; }
+
+  .stars-row { display: flex; gap: 8px; margin-bottom: 24px; justify-content: center; }
+  .star-btn { font-size: 1.8rem; cursor: pointer; transition: transform 0.1s; background: none; border: none; }
+  .star-btn:hover { transform: scale(1.2); }
+
+  .success-screen { text-align: center; padding: 20px 0; }
+  .success-icon { font-size: 3rem; margin-bottom: 16px; }
+  .success-title { font-family: 'Instrument Serif', serif; font-size: 1.8rem; margin-bottom: 8px; }
+  .success-sub { color: #888; font-size: 0.9rem; }
+
+  .step-dots { display: flex; gap: 8px; justify-content: center; margin-bottom: 32px; }
+  .step-dot { width: 8px; height: 8px; border-radius: 50%; background: #333; transition: background 0.2s; }
+  .step-dot.active { background: var(--gold); }
+
+  /* AI loading */
+  .ai-generating {
+    display: flex; align-items: center; gap: 10px; color: var(--gold);
+    font-size: 0.88rem; padding: 16px 0;
+  }
+  .ai-spinner {
+    width: 16px; height: 16px; border: 2px solid #333; border-top-color: var(--gold);
+    border-radius: 50%; animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .empty-state { text-align: center; padding: 60px 20px; color: var(--muted); }
+  .empty-icon { font-size: 2.5rem; margin-bottom: 12px; }
+  .empty-title { font-size: 1.1rem; font-weight: 600; margin-bottom: 6px; color: var(--ink); }
+
+  .tabs-inner { display: flex; gap: 4px; margin-bottom: 24px; }
+  .tab-inner {
+    padding: 8px 18px; border-radius: 8px; border: none; background: transparent;
+    font-family: 'DM Sans', sans-serif; font-size: 0.85rem; font-weight: 500;
+    color: var(--muted); cursor: pointer; transition: all 0.2s;
+  }
+  .tab-inner.active { background: var(--cream); color: var(--ink); font-weight: 600; }
+
+  /* ── Invite Modal ── */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(14,14,14,0.55); backdrop-filter: blur(4px);
+    z-index: 200; display: flex; align-items: center; justify-content: center; padding: 24px;
+  }
+  .modal {
+    background: var(--card); border: 1px solid var(--border); border-radius: 20px;
+    padding: 40px; max-width: 520px; width: 100%; box-shadow: var(--shadow-lg);
+    animation: modalIn 0.2s ease;
+  }
+  @keyframes modalIn { from { opacity:0; transform: translateY(12px) scale(0.97); } to { opacity:1; transform: none; } }
+  .modal-title { font-family: 'Instrument Serif', serif; font-size: 1.7rem; margin-bottom: 6px; }
+  .modal-sub { color: var(--muted); font-size: 0.88rem; margin-bottom: 28px; line-height: 1.5; }
+  .modal-footer { display: flex; gap: 10px; justify-content: flex-end; margin-top: 28px; }
+
+  /* Email preview */
+  .email-preview {
+    border: 1.5px solid var(--border); border-radius: 12px; overflow: hidden;
+    margin-top: 20px; font-size: 0.85rem;
+  }
+  .email-preview-header {
+    background: var(--cream); padding: 12px 18px; border-bottom: 1px solid var(--border);
+    color: var(--muted); font-size: 0.78rem; display: flex; gap: 16px;
+  }
+  .email-preview-body { padding: 20px 24px; background: #fff; }
+
+  .send-status {
+    display: flex; align-items: center; gap: 10px; padding: 14px 18px;
+    border-radius: 10px; font-size: 0.88rem; font-weight: 500; margin-top: 16px;
+  }
+  .send-status.success { background: #e8f4e8; color: var(--sage); }
+  .send-status.error { background: #f4e8e8; color: var(--rust); }
+
+  /* Invites list on campaign card */
+  .invites-chip {
+    display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px;
+    background: var(--cream); border-radius: 20px; font-size: 0.75rem; color: var(--muted);
+    margin-right: 6px; margin-top: 6px;
+  }
+
+  /* ── Auth Screen ── */
+  .auth-page {
+    min-height: 100vh; display: grid; grid-template-columns: 1fr 1fr;
+    background: var(--paper);
+  }
+  @media (max-width: 800px) { .auth-page { grid-template-columns: 1fr; } .auth-panel { display: none; } }
+
+  .auth-panel {
+    background: var(--ink); display: flex; flex-direction: column;
+    justify-content: space-between; padding: 48px 52px; overflow: hidden; position: relative;
+  }
+  .auth-panel-bg {
+    position: absolute; inset: 0; opacity: 0.07;
+    background: repeating-linear-gradient(45deg, var(--gold) 0, var(--gold) 1px, transparent 0, transparent 50%);
+    background-size: 24px 24px;
+  }
+  .auth-panel-logo { font-family: 'Instrument Serif', serif; font-size: 1.6rem; color: var(--gold); font-style: italic; position: relative; }
+  .auth-panel-quote { position: relative; }
+  .auth-panel-q { font-family: 'Instrument Serif', serif; font-size: 1.9rem; color: #fff; line-height: 1.3; margin-bottom: 20px; }
+  .auth-panel-attr { color: #666; font-size: 0.85rem; }
+  .auth-panel-stars { color: var(--gold); font-size: 1rem; margin-bottom: 8px; }
+
+  .auth-form-side {
+    display: flex; align-items: center; justify-content: center; padding: 48px 40px;
+  }
+  .auth-form-box { width: 100%; max-width: 400px; }
+  .auth-title { font-family: 'Instrument Serif', serif; font-size: 2.2rem; margin-bottom: 6px; line-height: 1.1; }
+  .auth-sub { color: var(--muted); font-size: 0.9rem; margin-bottom: 32px; }
+  .auth-divider { text-align: center; color: var(--muted); font-size: 0.8rem; margin: 20px 0; position: relative; }
+  .auth-divider::before, .auth-divider::after {
+    content: ''; position: absolute; top: 50%; width: 42%; height: 1px; background: var(--border);
+  }
+  .auth-divider::before { left: 0; } .auth-divider::after { right: 0; }
+  .auth-switch { text-align: center; margin-top: 24px; font-size: 0.88rem; color: var(--muted); }
+  .auth-switch button { background: none; border: none; color: var(--gold); font-weight: 600; cursor: pointer; font-size: 0.88rem; }
+  .auth-switch button:hover { text-decoration: underline; }
+  .auth-error { background: #fdf0ee; border: 1px solid #f5c6bb; border-radius: 9px; padding: 12px 16px; color: var(--rust); font-size: 0.85rem; margin-bottom: 16px; }
+  .auth-forgot { text-align: right; margin-top: -8px; margin-bottom: 16px; }
+  .auth-forgot button { background: none; border: none; color: var(--muted); font-size: 0.8rem; cursor: pointer; }
+  .auth-forgot button:hover { color: var(--gold); }
+  .auth-success { background: #eef4ee; border: 1px solid #b8d4b8; border-radius: 9px; padding: 12px 16px; color: var(--sage); font-size: 0.85rem; margin-bottom: 16px; }
+
+  /* User menu in nav */
+  .user-menu { position: relative; }
+  .user-btn {
+    display: flex; align-items: center; gap: 8px; padding: 7px 14px;
+    border-radius: 9px; border: 1.5px solid var(--border); background: transparent;
+    cursor: pointer; font-family: 'DM Sans', sans-serif; font-size: 0.85rem;
+    color: var(--ink); transition: all 0.2s;
+  }
+  .user-btn:hover { border-color: var(--ink); }
+  .user-avatar {
+    width: 26px; height: 26px; border-radius: 50%; background: var(--gold);
+    color: #fff; font-size: 0.72rem; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .user-dropdown {
+    position: absolute; right: 0; top: calc(100% + 8px); background: var(--card);
+    border: 1px solid var(--border); border-radius: 12px; padding: 8px;
+    min-width: 200px; box-shadow: var(--shadow-lg); z-index: 200;
+    animation: modalIn 0.15s ease;
+  }
+  .user-dropdown-email { padding: 8px 12px; font-size: 0.78rem; color: var(--muted); border-bottom: 1px solid var(--border); margin-bottom: 6px; }
+  .user-dropdown-item {
+    width: 100%; text-align: left; padding: 9px 12px; border-radius: 7px;
+    border: none; background: transparent; font-family: 'DM Sans', sans-serif;
+    font-size: 0.88rem; color: var(--ink); cursor: pointer; transition: background 0.15s;
+  }
+  .user-dropdown-item:hover { background: var(--cream); }
+  .user-dropdown-item.danger { color: var(--rust); }
+
+  @media (max-width: 700px) {
+    .nav { padding: 14px 20px; }
+    .dashboard { padding: 28px 20px; }
+    .form-row { grid-template-columns: 1fr; }
+    .stats-row { grid-template-columns: 1fr; }
+    .dash-title { font-size: 2rem; }
+  }
+`;
+
+// ── Mock data ─────────────────────────────────────────────────────────────────
+const MOCK_TESTIMONIALS = [
+  {
+    id: 1, name: "Sarah Chen", company: "Bright Agency", rating: 5,
+    quote: "The whole process was so smooth — I recorded it in 10 minutes and the final video looked genuinely professional. Our conversion rate went up noticeably after we added it to our landing page.",
+    status: "approved", campaign: "Agency Social Proof"
+  },
+  {
+    id: 2, name: "Marcus Powell", company: "Powell Consulting", rating: 5,
+    quote: "I've tried other platforms but nothing made it this easy for my clients to actually follow through and record something. The prompts really helped guide them.",
+    status: "new", campaign: "Consultant Pack"
+  },
+  {
+    id: 3, name: "Lena Marsh", company: "Ecom Ventures", rating: 4,
+    quote: "Great experience — the questions felt natural and it didn't feel like I was doing a scripted ad. Honestly surprised how good the end result looked.",
+    status: "pending", campaign: "Agency Social Proof"
+  }
+];
+
+// ── AI helpers ────────────────────────────────────────────────────────────────
+async function generatePrompts(businessName, industry, context) {
+  const response = await fetch(ANTHROPIC_API_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 1000,
+      messages: [{
+        role: "user",
+        content: `You are helping generate video testimonial prompts for a business.
+
+Business: ${businessName}
+Industry: ${industry}
+Extra context: ${context || "None"}
+
+Generate exactly 4 short, conversational video testimonial questions that will help customers share genuine, compelling stories. Each question should be easy to answer naturally on camera — not corporate or stiff.
+
+Respond ONLY with a JSON array of 4 strings, no markdown, no explanation. Example format:
+["Question 1?","Question 2?","Question 3?","Question 4?"]`
+      }]
+    })
+  });
+  const data = await response.json();
+  const text = data.content.map(b => b.text || "").join("");
+  return JSON.parse(text.replace(/```json|```/g, "").trim());
+}
+
+async function analyzeTestimonial(answers, prompts) {
+  const combined = prompts.map((p, i) => `Q: ${p}\nA: ${answers[i] || "(no answer)"}`).join("\n\n");
+  const response = await fetch(ANTHROPIC_API_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 400,
+      messages: [{
+        role: "user",
+        content: `Based on these testimonial answers, write a single compelling 2-3 sentence testimonial quote in the customer's voice. Make it sound natural, genuine, and specific — not generic marketing speak.
+
+${combined}
+
+Respond with ONLY the quote text, no quotation marks, no explanation.`
+      }]
+    })
+  });
+  const data = await response.json();
+  return data.content.map(b => b.text || "").join("").trim();
+}
+
+// ── Email HTML builder ────────────────────────────────────────────────────────
+function buildEmailHTML({ clientName, companyName, campaignName, prompts, recordingLink }) {
+  const promptRows = prompts.map((p, i) => `
+    <tr>
+      <td style="padding:10px 0;border-bottom:1px solid #ede8dc;vertical-align:top;width:28px;">
+        <span style="display:inline-block;width:22px;height:22px;border-radius:50%;background:#c8a96e;color:#fff;font-size:11px;font-weight:700;text-align:center;line-height:22px;">${i+1}</span>
+      </td>
+      <td style="padding:10px 0 10px 12px;border-bottom:1px solid #ede8dc;font-size:14px;color:#3a3530;line-height:1.5;">${p}</td>
+    </tr>`).join("");
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Share your experience</title></head>
+<body style="margin:0;padding:0;background:#f5f0e8;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f0e8;padding:48px 24px;">
+    <tr><td align="center">
+      <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;">
+        <tr><td style="padding-bottom:32px;text-align:center;">
+          <span style="font-size:20px;color:#c8a96e;font-style:italic;">Vouch&#10022;</span>
+        </td></tr>
+        <tr><td style="background:#faf7f2;border:1px solid #ddd8cc;border-radius:20px;overflow:hidden;">
+          <table width="100%" cellpadding="0" cellspacing="0">
+            <tr><td style="background:#c8a96e;height:4px;font-size:1px;line-height:1px;">&nbsp;</td></tr>
+          </table>
+          <table width="100%" cellpadding="0" cellspacing="0">
+            <tr><td style="padding:40px 44px;">
+              <p style="margin:0 0 8px;font-size:11px;font-weight:600;color:#c8a96e;text-transform:uppercase;letter-spacing:0.1em;">You've been invited</p>
+              <h1 style="margin:0 0 16px;font-size:26px;font-weight:400;color:#0e0e0e;line-height:1.25;">Hi ${clientName}, share your<br><em>honest experience</em> with us</h1>
+              <p style="margin:0 0 28px;font-size:15px;color:#7a7060;line-height:1.6;">${companyName} would love to hear about your experience. It takes just a few minutes — and your words could help others make a great decision.</p>
+              <p style="margin:0 0 12px;font-size:11px;font-weight:600;color:#7a7060;text-transform:uppercase;letter-spacing:0.06em;">You'll be asked about</p>
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:32px;">${promptRows}</table>
+              <table cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
+                <tr><td style="background:#0e0e0e;border-radius:10px;">
+                  <a href="${recordingLink}" style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;">Record My Testimonial &rarr;</a>
+                </td></tr>
+              </table>
+              <p style="margin:0;font-size:12px;color:#aaa;line-height:1.5;">Or copy this link: <a href="${recordingLink}" style="color:#c8a96e;">${recordingLink}</a></p>
+            </td></tr>
+          </table>
+          <table width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #ede8dc;">
+            <tr><td style="padding:18px 44px;text-align:center;">
+              <p style="margin:0;font-size:11px;color:#bbb;">Sent via <span style="color:#c8a96e;">Vouch</span> on behalf of ${companyName} &middot; ${campaignName}</p>
+            </td></tr>
+          </table>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`;
+}
+
+// ── Send invite via Resend ────────────────────────────────────────────────────
+async function sendInviteEmail({ toEmail, clientName, campaign, resendApiKey }) {
+  const recordingLink = `https://vouch.app/record/${campaign.id}`;
+  const html = buildEmailHTML({
+    clientName,
+    companyName: campaign.companyName,
+    campaignName: campaign.name,
+    prompts: campaign.prompts,
+    recordingLink,
+  });
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${resendApiKey}`,
+    },
+    body: JSON.stringify({
+      from: `${campaign.companyName} via Vouch <onboarding@resend.dev>`,
+      to: [toEmail],
+      subject: `${clientName}, share your experience with ${campaign.companyName}`,
+      html,
+    }),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.message || "Failed to send email");
+  }
+  return res.json();
+}
+
+// ── Invite Modal ──────────────────────────────────────────────────────────────
+function InviteModal({ campaign, onClose }) {
+  const [clientName, setClientName] = useState("");
+  const [toEmail, setToEmail] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [status, setStatus] = useState(null); // null | "sending" | "success" | "error"
+  const [errorMsg, setErrorMsg] = useState("");
+  const [showPreview, setShowPreview] = useState(false);
+
+  const recordingLink = `https://vouch.app/record/${campaign.id}`;
+
+  async function handleSend() {
+    if (!clientName || !toEmail || !apiKey) return;
+    setStatus("sending");
+    try {
+      await sendInviteEmail({ toEmail, clientName, campaign, resendApiKey: apiKey });
+      setStatus("success");
+    } catch (e) {
+      setErrorMsg(e.message);
+      setStatus("error");
+    }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal">
+        <div className="modal-title">Invite a Client</div>
+        <div className="modal-sub">
+          Send a branded email with the recording link and questions preview for <strong>{campaign.name}</strong>.
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          <div className="field">
+            <label>Client's First Name</label>
+            <input value={clientName} onChange={e => setClientName(e.target.value)} placeholder="e.g. Sarah" />
+          </div>
+          <div className="field">
+            <label>Client's Email</label>
+            <input type="email" value={toEmail} onChange={e => setToEmail(e.target.value)} placeholder="sarah@example.com" />
+          </div>
+          <div className="field">
+            <label>Resend API Key</label>
+            <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="re_••••••••••••••••" />
+            <span style={{ fontSize: "0.76rem", color: "var(--muted)" }}>
+              Get your key at <a href="https://resend.com" target="_blank" rel="noreferrer" style={{ color: "var(--gold)" }}>resend.com</a> — free up to 3,000 emails/month.
+            </span>
+          </div>
+        </div>
+
+        {/* Email preview toggle */}
+        <button className="btn btn-outline btn-sm" style={{ marginTop: 16 }}
+          onClick={() => setShowPreview(v => !v)}>
+          {showPreview ? "Hide" : "Preview"} email
+        </button>
+
+        {showPreview && (
+          <div className="email-preview" style={{ marginTop: 16 }}>
+            <div className="email-preview-header">
+              <span><strong>To:</strong> {toEmail || "client@example.com"}</span>
+              <span><strong>From:</strong> {campaign.companyName} via Vouch</span>
+            </div>
+            <div className="email-preview-body">
+              <p style={{ fontWeight: 700, marginBottom: 4, color: "#0e0e0e" }}>
+                Hi {clientName || "there"}, share your <em>honest experience</em> with us
+              </p>
+              <p style={{ color: "#666", fontSize: "0.85rem", marginBottom: 12, lineHeight: 1.5 }}>
+                {campaign.companyName} would love to hear about your experience. It takes just a few minutes.
+              </p>
+              <p style={{ fontSize: "0.75rem", fontWeight: 600, color: "#aaa", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>You'll be asked about</p>
+              {campaign.prompts.map((p, i) => (
+                <div key={i} style={{ display: "flex", gap: 10, marginBottom: 8, alignItems: "flex-start" }}>
+                  <span style={{ background: "#c8a96e", color: "#fff", borderRadius: "50%", width: 20, height: 20, fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 2 }}>{i+1}</span>
+                  <span style={{ fontSize: "0.85rem", color: "#333", lineHeight: 1.4 }}>{p}</span>
+                </div>
+              ))}
+              <div style={{ marginTop: 16, padding: "10px 20px", background: "#0e0e0e", borderRadius: 8, display: "inline-block", color: "#fff", fontSize: "0.85rem", fontWeight: 600 }}>
+                Record My Testimonial →
+              </div>
+            </div>
+          </div>
+        )}
+
+        {status === "success" && (
+          <div className="send-status success">✓ Email sent to {toEmail}!</div>
+        )}
+        {status === "error" && (
+          <div className="send-status error">✕ {errorMsg}</div>
+        )}
+
+        <div className="modal-footer">
+          <button className="btn btn-outline" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary"
+            disabled={!clientName || !toEmail || !apiKey || status === "sending" || status === "success"}
+            onClick={handleSend}>
+            {status === "sending" ? "Sending…" : status === "success" ? "✓ Sent!" : "Send Invite ✉"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Components ────────────────────────────────────────────────────────────────
+
+function StarRating({ value, onChange }) {
+  const [hover, setHover] = useState(0);
+  return (
+    <div className="stars-row">
+      {[1,2,3,4,5].map(s => (
+        <button key={s} className="star-btn"
+          onMouseEnter={() => setHover(s)}
+          onMouseLeave={() => setHover(0)}
+          onClick={() => onChange(s)}>
+          {s <= (hover || value) ? "★" : "☆"}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ── Client Recording Page ──────────────────────────────────────────────────
+function ClientPage({ campaign, onBack, storage, userId }) {
+  const [step, setStep] = useState(0);
+  const [selectedPrompt, setSelectedPrompt] = useState(0);
+  const [answers, setAnswers] = useState({});
+  const [rating, setRating] = useState(0);
+  const [name, setName] = useState("");
+  const [company, setCompany] = useState("");
+  const [recording, setRecording] = useState(false);
+  const [videoURLs, setVideoURLs] = useState({});     // local blob URLs for preview
+  const [videoBlobs, setVideoBlobs] = useState({});   // raw Blobs for upload
+  const [uploadProgress, setUploadProgress] = useState({}); // { [idx]: 0-100 }
+  const [uploadedURLs, setUploadedURLs] = useState({}); // Firebase download URLs
+  const [submitting, setSubmitting] = useState(false);
+  const [submitPhase, setSubmitPhase] = useState(""); // "uploading" | "analyzing" | ""
+  const [generatedQuote, setGeneratedQuote] = useState("");
+  const videoRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const chunksRef = useRef([]);
+  const streamRef = useRef(null);
+
+  const prompts = campaign?.prompts || [];
+  const hasVideos = Object.keys(videoBlobs).length > 0;
+
+  // Check camera availability on mount
+  const [cameraAvailable, setCameraAvailable] = useState(null); // null=unknown, true, false
+  useEffect(() => {
+    if (!navigator.mediaDevices?.getUserMedia) { setCameraAvailable(false); return; }
+    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+      .then(s => { s.getTracks().forEach(t => t.stop()); setCameraAvailable(true); })
+      .catch(() => setCameraAvailable(false));
+  }, []);
+
+  async function startRecording() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      streamRef.current = stream;
+      if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play(); }
+      const mr = new MediaRecorder(stream);
+      mediaRecorderRef.current = mr;
+      chunksRef.current = [];
+      mr.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      mr.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: "video/webm" });
+        const url = URL.createObjectURL(blob);
+        setVideoURLs(prev => ({ ...prev, [selectedPrompt]: url }));
+        setVideoBlobs(prev => ({ ...prev, [selectedPrompt]: blob }));
+        if (videoRef.current) { videoRef.current.srcObject = null; videoRef.current.src = url; }
+        stream.getTracks().forEach(t => t.stop());
+      };
+      mr.start();
+      setRecording(true);
+      setCameraAvailable(true);
+    } catch {
+      setCameraAvailable(false);
+    }
+  }
+
+  function stopRecording() {
+    mediaRecorderRef.current?.stop();
+    setRecording(false);
+  }
+
+  async function handleSubmit() {
+    setSubmitting(true);
+
+    // Phase 1: upload videos to Firebase Storage
+    let firebaseURLs = {};
+    if (hasVideos && storage && userId) {
+      setSubmitPhase("uploading");
+      try {
+        firebaseURLs = await uploadVideos({
+          storage,
+          userId,
+          campaignId: campaign?.id || "demo",
+          videoBlobs,
+          onProgress: (idx, pct) =>
+            setUploadProgress(prev => ({ ...prev, [idx]: pct })),
+        });
+        setUploadedURLs(firebaseURLs);
+      } catch (e) {
+        console.error("Upload failed:", e);
+        // Continue anyway — we still have text answers
+      }
+    }
+
+    // Phase 2: generate AI testimonial quote from text answers
+    setSubmitPhase("analyzing");
+    const quote = await analyzeTestimonial(answers, prompts);
+    setGeneratedQuote(quote);
+
+    setSubmitting(false);
+    setSubmitPhase("");
+    setStep(3);
+  }
+
+  return (
+    <div className="client-page">
+      <div className="client-logo">✦ Vouch</div>
+
+      <div className="client-card">
+        <div className="step-dots">
+          {[0,1,2].map(i => <div key={i} className={`step-dot ${step === i ? "active" : ""}`} />)}
+        </div>
+
+        {/* Step 0: Intro */}
+        {step === 0 && (
+          <>
+            <div className="client-step">Step 1 of 3 — About You</div>
+            <div className="client-title">Share your experience</div>
+            <div className="client-sub">
+              {campaign?.name ? `${campaign.companyName} would love to hear from you.` : "We'd love to hear about your experience."} It only takes a few minutes.
+            </div>
+            <div className="field" style={{ marginBottom: 14 }}>
+              <label style={{ color: "#888" }}>Your Name</label>
+              <input style={{ background: "#111", border: "1.5px solid #333", color: "#fff", borderRadius: 9, padding: "11px 14px", fontFamily: "DM Sans, sans-serif" }}
+                value={name} onChange={e => setName(e.target.value)} placeholder="Jane Smith" />
+            </div>
+            <div className="field" style={{ marginBottom: 24 }}>
+              <label style={{ color: "#888" }}>Company (optional)</label>
+              <input style={{ background: "#111", border: "1.5px solid #333", color: "#fff", borderRadius: 9, padding: "11px 14px", fontFamily: "DM Sans, sans-serif" }}
+                value={company} onChange={e => setCompany(e.target.value)} placeholder="Acme Corp" />
+            </div>
+            <button className="btn btn-gold" style={{ width: "100%", justifyContent: "center" }}
+              disabled={!name} onClick={() => setStep(1)}>
+              Continue →
+            </button>
+          </>
+        )}
+
+        {/* Step 1: Respond to prompts */}
+        {step === 1 && (
+          <>
+            <div className="client-step">Step 2 of 3 — Your Answers</div>
+            <div className="client-title">Answer a few questions</div>
+            <div className="client-sub">Pick each question and record a short video response, or type your answer.</div>
+
+            <div style={{ marginBottom: 20 }}>
+              {prompts.map((p, i) => (
+                <div key={i} className={`prompt-card ${selectedPrompt === i ? "selected" : ""}`}
+                  onClick={() => setSelectedPrompt(i)}>
+                  <div className="prompt-num">{i + 1}</div>
+                  <div className="prompt-q">{p}
+                    {videoURLs[i] && <span style={{ display: "block", color: "#5a9a5a", fontSize: "0.78rem", marginTop: 4 }}>✓ Recorded</span>}
+                    {answers[i] && !videoURLs[i] && <span style={{ display: "block", color: "#5a9a5a", fontSize: "0.78rem", marginTop: 4 }}>✓ Written</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ background: "#111", border: "1px solid #2a2a2a", borderRadius: 14, padding: 20, marginBottom: 20 }}>
+              <div style={{ color: "#888", fontSize: "0.78rem", marginBottom: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                Q{selectedPrompt + 1}: {prompts[selectedPrompt]}
+              </div>
+
+              {/* Video area — only shown when camera is available */}
+              {cameraAvailable === false ? (
+                <div style={{ background: "#0d0d0d", border: "1px dashed #2a2a2a", borderRadius: 12, padding: "24px 20px", marginBottom: 14, textAlign: "center" }}>
+                  <div style={{ fontSize: "2rem", marginBottom: 8 }}>📝</div>
+                  <div style={{ color: "#666", fontSize: "0.85rem", lineHeight: 1.5, marginBottom: 4 }}>
+                    Camera isn't available in this preview
+                  </div>
+                  <div style={{ color: "#444", fontSize: "0.78rem" }}>
+                    Type your answer below — it works just as well
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="video-area" style={{ marginBottom: 14 }}>
+                    {!videoURLs[selectedPrompt] && !recording ? (
+                      <div className="video-placeholder">
+                        <div className="video-icon">🎥</div>
+                        <div className="video-hint">{cameraAvailable === null ? "Checking camera…" : "Press record to answer on camera"}</div>
+                      </div>
+                    ) : (
+                      <video ref={videoRef} autoPlay={recording} muted={recording} controls={!recording} style={{ width: "100%", borderRadius: 12 }} src={videoURLs[selectedPrompt]} />
+                    )}
+                  </div>
+                  <div className="rec-controls">
+                    {!recording ? (
+                      <button className="rec-btn rec-btn-record" onClick={startRecording} title="Start recording">⏺</button>
+                    ) : (
+                      <>
+                        <div className="rec-indicator"><div className="rec-dot" /> Recording</div>
+                        <button className="rec-btn rec-btn-stop" onClick={stopRecording} title="Stop">⏹</button>
+                      </>
+                    )}
+                  </div>
+                </>
+              )}
+
+              <div style={{ textAlign: "center", color: "#555", fontSize: "0.8rem", marginBottom: 12 }}>
+                {cameraAvailable === false ? "Your written answer" : "— or type your answer —"}
+              </div>
+              <textarea
+                style={{ width: "100%", background: "#1a1a1a", border: "1.5px solid #2a2a2a", color: "#fff", borderRadius: 9, padding: "12px 14px", fontFamily: "DM Sans, sans-serif", fontSize: "0.9rem", resize: "vertical", minHeight: 80, outline: "none" }}
+                placeholder="Type your answer here..."
+                value={answers[selectedPrompt] || ""}
+                onChange={e => setAnswers(prev => ({ ...prev, [selectedPrompt]: e.target.value }))}
+              />
+            </div>
+
+            <button className="btn btn-gold" style={{ width: "100%", justifyContent: "center" }}
+              onClick={() => setStep(2)}>
+              Continue to Rating →
+            </button>
+          </>
+        )}
+
+        {/* Step 2: Rating */}
+        {step === 2 && (
+          <>
+            <div className="client-step">Step 3 of 3 — Rating</div>
+            <div className="client-title" style={{ textAlign: "center" }}>How would you rate your experience?</div>
+            <div className="client-sub" style={{ textAlign: "center", marginBottom: 28 }}>
+              Your honest feedback means a lot.
+            </div>
+            <StarRating value={rating} onChange={setRating} />
+
+            {submitting ? (
+              <div>
+                {submitPhase === "uploading" && hasVideos && (
+                  <div className="upload-progress">
+                    <div style={{ color: "#888", fontSize: "0.78rem", marginBottom: 12, textAlign: "center", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                      Uploading videos…
+                    </div>
+                    {Object.keys(videoBlobs).map(idx => (
+                      <div key={idx} className="upload-row">
+                        <div className="upload-label">Q{Number(idx)+1}</div>
+                        <div className="progress-track">
+                          <div className="progress-fill" style={{ width: `${uploadProgress[idx] || 0}%` }} />
+                        </div>
+                        <div className="progress-pct">{uploadProgress[idx] || 0}%</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {submitPhase === "analyzing" && (
+                  <div className="ai-generating" style={{ justifyContent: "center", color: "#888" }}>
+                    <div className="ai-spinner" style={{ borderTopColor: "var(--gold)", borderColor: "#333" }} />
+                    Crafting your testimonial…
+                  </div>
+                )}
+              </div>
+            ) : (
+              <button className="btn btn-gold" style={{ width: "100%", justifyContent: "center", marginTop: 8 }}
+                disabled={!rating} onClick={handleSubmit}>
+                Submit Testimonial ✦
+              </button>
+            )}
+          </>
+        )}
+
+        {/* Step 3: Done */}
+        {step === 3 && (
+          <div className="success-screen">
+            <div className="success-icon">🌟</div>
+            <div className="success-title">Thank you, {name}!</div>
+            <div className="success-sub" style={{ marginBottom: 24 }}>Your testimonial has been submitted and is being reviewed.</div>
+            {generatedQuote && (
+              <div style={{ background: "#111", border: "1px solid #2a2a2a", borderRadius: 12, padding: 20, textAlign: "left", marginBottom: 20 }}>
+                <div style={{ color: "#888", fontSize: "0.78rem", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.06em" }}>Your testimonial preview</div>
+                <div style={{ fontFamily: "Instrument Serif, serif", fontSize: "1.05rem", fontStyle: "italic", color: "#ddd", lineHeight: 1.6 }}>
+                  "{generatedQuote}"
+                </div>
+              </div>
+            )}
+            <button className="btn btn-outline" style={{ color: "#888", borderColor: "#333" }} onClick={onBack}>
+              ← Back to app
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── AI: suggest clip ranges from quote ───────────────────────────────────────
+async function suggestClips(quote, prompts) {
+  const response = await fetch(ANTHROPIC_API_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 600,
+      messages: [{
+        role: "user",
+        content: `You are a video editor assistant. Given this testimonial quote and the questions asked, suggest 3 short social media clip titles with a one-sentence description of what moment to highlight.
+
+Quote: "${quote}"
+Questions: ${prompts.join(" | ")}
+
+Respond ONLY with a JSON array of exactly 3 objects like:
+[{"title":"Clip title","desc":"What to highlight","emoji":"🎯"}]
+Use relevant emojis. No markdown, no explanation.`
+      }]
+    })
+  });
+  const data = await response.json();
+  const text = data.content.map(b => b.text || "").join("");
+  return JSON.parse(text.replace(/```json|```/g, "").trim());
+}
+
+// ── Video Editor ──────────────────────────────────────────────────────────────
+const BRAND_COLORS = ["#c8a96e", "#e05c5c", "#5c9be0", "#5cb87a", "#9b5ce0", "#e08c5c"];
+
+function VideoEditor({ testimonial, onClose }) {
+  const quote = testimonial.quote || "";
+  const prompts = testimonial.prompts || [];
+  const videoURLs = testimonial.videoURLs || {};
+  const firstVideoKey = Object.keys(videoURLs)[0];
+
+  // ── State ──
+  const [brand, setBrand] = useState({
+    name: testimonial.name || "",
+    company: testimonial.company || "",
+    color: "#c8a96e",
+    showLogo: true,
+  });
+
+  // Captions: split quote into ~5-word chunks with fake timestamps
+  const [captions, setCaptions] = useState(() => {
+    const words = quote.split(" ");
+    const chunks = [];
+    for (let i = 0; i < words.length; i += 6) {
+      chunks.push({
+        id: i,
+        text: words.slice(i, i + 6).join(" "),
+        start: i * 0.6,
+      });
+    }
+    return chunks;
+  });
+  const [activeCaption, setActiveCaption] = useState(null);
+
+  const [clips, setClips] = useState(null);
+  const [loadingClips, setLoadingClips] = useState(false);
+  const [activeClip, setActiveClip] = useState(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportDone, setExportDone] = useState(false);
+
+  // Canvas / video refs
+  const canvasRef = useRef(null);
+  const videoRef = useRef(null);
+  const rafRef = useRef(null);
+  const [playing, setPlaying] = useState(false);
+
+  // ── Canvas renderer ──
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    canvas.width = 1080; canvas.height = 1920;
+
+    function draw() {
+      const video = videoRef.current;
+      ctx.clearRect(0, 0, 1080, 1920);
+
+      // Background
+      ctx.fillStyle = "#0e0e0e";
+      ctx.fillRect(0, 0, 1080, 1920);
+
+      // Video frame (centre, letterboxed)
+      if (video && video.readyState >= 2) {
+        const vw = video.videoWidth || 1920;
+        const vh = video.videoHeight || 1080;
+        const scale = Math.min(1080 / vw, 1350 / vh);
+        const dw = vw * scale; const dh = vh * scale;
+        const dx = (1080 - dw) / 2; const dy = (1920 - dh) / 2 - 100;
+        ctx.drawImage(video, dx, dy, dw, dh);
+      } else {
+        // Placeholder gradient
+        const grad = ctx.createLinearGradient(0, 0, 0, 1350);
+        grad.addColorStop(0, "#1a1a1a");
+        grad.addColorStop(1, "#0e0e0e");
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 1080, 1350);
+        ctx.fillStyle = "#2a2a2a";
+        ctx.font = "bold 48px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("🎥 Video Preview", 540, 660);
+        ctx.font = "32px sans-serif";
+        ctx.fillStyle = "#444";
+        ctx.fillText("Connect Firebase Storage to see live video", 540, 720);
+      }
+
+      // Bottom branding bar
+      const barY = 1480;
+      ctx.fillStyle = "rgba(0,0,0,0.75)";
+      ctx.fillRect(0, barY, 1080, 440);
+
+      // Accent line
+      ctx.fillStyle = brand.color;
+      ctx.fillRect(0, barY, 1080, 6);
+
+      // Active caption text
+      const currentTime = video ? video.currentTime : 0;
+      const activeCap = captions.find((c, i) => {
+        const next = captions[i + 1];
+        return currentTime >= c.start && (!next || currentTime < next.start);
+      }) || captions[0];
+
+      if (activeCap) {
+        ctx.font = "bold 72px 'DM Sans', sans-serif";
+        ctx.fillStyle = "#ffffff";
+        ctx.textAlign = "center";
+        ctx.shadowColor = "rgba(0,0,0,0.8)";
+        ctx.shadowBlur = 20;
+        // Word wrap
+        const words = activeCap.text.split(" ");
+        let line = ""; const lines = []; const maxW = 900;
+        for (const w of words) {
+          const test = line ? line + " " + w : w;
+          if (ctx.measureText(test).width > maxW && line) { lines.push(line); line = w; }
+          else line = test;
+        }
+        if (line) lines.push(line);
+        lines.forEach((l, i) => ctx.fillText(l, 540, barY + 90 + i * 90));
+        ctx.shadowBlur = 0;
+      }
+
+      // Name + company
+      ctx.font = "bold 44px 'DM Sans', sans-serif";
+      ctx.fillStyle = brand.color;
+      ctx.textAlign = "left";
+      ctx.fillText(brand.name, 60, barY + 300);
+      ctx.font = "36px 'DM Sans', sans-serif";
+      ctx.fillStyle = "#aaa";
+      ctx.fillText(brand.company, 60, barY + 355);
+
+      // Vouch watermark
+      if (brand.showLogo) {
+        ctx.font = "italic bold 34px serif";
+        ctx.fillStyle = brand.color;
+        ctx.textAlign = "right";
+        ctx.fillText("Vouch✦", 1020, barY + 340);
+      }
+
+      rafRef.current = requestAnimationFrame(draw);
+    }
+
+    rafRef.current = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [brand, captions]);
+
+  // ── Playback ──
+  function togglePlay() {
+    const v = videoRef.current;
+    if (!v || !v.src) return;
+    if (v.paused) { v.play(); setPlaying(true); }
+    else { v.pause(); setPlaying(false); }
+  }
+
+  // ── Load AI clips ──
+  async function loadClips() {
+    setLoadingClips(true);
+    try {
+      const c = await suggestClips(quote, prompts);
+      setClips(c);
+      setActiveClip(0);
+    } catch {
+      setClips([
+        { title: "The Key Result", desc: "Highlight the strongest outcome they mentioned", emoji: "🎯" },
+        { title: "Before & After", desc: "Capture the contrast between their challenge and solution", emoji: "✨" },
+        { title: "The Recommendation", desc: "Their direct endorsement for the camera", emoji: "🌟" },
+      ]);
+      setActiveClip(0);
+    }
+    setLoadingClips(false);
+  }
+
+  useEffect(() => { loadClips(); }, []);
+
+  // ── Export (MediaRecorder on canvas) ──
+  async function handleExport() {
+    setExporting(true);
+    const canvas = canvasRef.current;
+    const video = videoRef.current;
+    try {
+      const stream = canvas.captureStream(30);
+      const chunks = [];
+      const mr = new MediaRecorder(stream, { mimeType: "video/webm;codecs=vp9" });
+      mr.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+      mr.onstop = () => {
+        const blob = new Blob(chunks, { type: "video/webm" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = `${testimonial.name || "testimonial"}-vouch.webm`;
+        a.click();
+        URL.revokeObjectURL(url);
+        setExporting(false);
+        setExportDone(true);
+        setTimeout(() => setExportDone(false), 3000);
+      };
+      mr.start();
+      if (video && video.src) { video.currentTime = 0; video.play(); }
+      // Record for video duration or 10s max
+      const duration = (video && video.duration && isFinite(video.duration)) ? Math.min(video.duration * 1000, 30000) : 8000;
+      setTimeout(() => { mr.stop(); if (video) { video.pause(); } }, duration);
+    } catch {
+      setExporting(false);
+      alert("Export failed — your browser may not support canvas recording.");
+    }
+  }
+
+  return (
+    <div className="editor-overlay">
+      {/* Hidden video element for canvas rendering */}
+      {firstVideoKey && videoURLs[firstVideoKey] && (
+        <video ref={videoRef} src={videoURLs[firstVideoKey]} crossOrigin="anonymous"
+          style={{ display: "none" }} onEnded={() => setPlaying(false)} />
+      )}
+
+      {/* Nav */}
+      <div className="editor-nav">
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <button className="btn btn-outline btn-sm" style={{ color: "#888", borderColor: "#333" }} onClick={onClose}>← Back</button>
+          <div className="editor-title">Editing — {testimonial.name}</div>
+        </div>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button className="btn btn-outline btn-sm" style={{ color: "#888", borderColor: "#333" }} onClick={togglePlay}>
+            {playing ? "⏸ Pause" : "▶ Play"}
+          </button>
+        </div>
+      </div>
+
+      <div className="editor-body">
+        {/* Main column */}
+        <div className="editor-main">
+
+          {/* Canvas preview */}
+          <div style={{ display: "flex", justifyContent: "center" }}>
+            <div className="canvas-wrap" style={{ width: "min(100%, 240px)" }}>
+              <canvas ref={canvasRef} />
+            </div>
+          </div>
+
+          {/* Social clips */}
+          <div>
+            <div style={{ color: "#555", fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12 }}>
+              AI Social Clips
+            </div>
+            {loadingClips ? (
+              <div className="ai-generating" style={{ color: "#555" }}>
+                <div className="ai-spinner" style={{ borderColor: "#2a2a2a", borderTopColor: "#c8a96e" }} />
+                Analysing best moments…
+              </div>
+            ) : (
+              <div className="clip-strip">
+                {(clips || []).map((c, i) => (
+                  <button key={i} className={`clip-pill ${activeClip === i ? "active" : ""}`}
+                    onClick={() => setActiveClip(i)}>
+                    {c.emoji} {c.title}
+                  </button>
+                ))}
+              </div>
+            )}
+            {clips && activeClip !== null && clips[activeClip] && (
+              <div style={{ marginTop: 12, padding: "12px 16px", background: "#111", border: "1px solid #1e1e1e", borderRadius: 8, color: "#888", fontSize: "0.85rem", lineHeight: 1.5 }}>
+                {clips[activeClip].desc}
+              </div>
+            )}
+          </div>
+
+          {/* Captions */}
+          <div>
+            <div style={{ color: "#555", fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12 }}>
+              Captions — click to edit
+            </div>
+            <div className="caption-list">
+              {captions.map((cap, i) => (
+                <div key={cap.id} className={`caption-row ${activeCaption === i ? "active" : ""}`}
+                  onClick={() => setActiveCaption(i)}>
+                  <div className="caption-time">{String(Math.floor(cap.start / 60)).padStart(2,"0")}:{String(Math.floor(cap.start % 60)).padStart(2,"0")}</div>
+                  <textarea className="caption-text-input" rows={1}
+                    value={cap.text}
+                    onChange={e => setCaptions(prev => prev.map((c, j) => j === i ? { ...c, text: e.target.value } : c))}
+                    onClick={e => e.stopPropagation()}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Sidebar */}
+        <div className="editor-sidebar">
+          <div className="editor-sidebar-section">
+            <div className="editor-sidebar-label">Branding</div>
+
+            <div className="brand-row">
+              <div className="brand-label">Name overlay</div>
+              <input className="brand-input" value={brand.name}
+                onChange={e => setBrand(b => ({ ...b, name: e.target.value }))}
+                placeholder="Jane Smith" />
+            </div>
+            <div className="brand-row">
+              <div className="brand-label">Company / title</div>
+              <input className="brand-input" value={brand.company}
+                onChange={e => setBrand(b => ({ ...b, company: e.target.value }))}
+                placeholder="Acme Corp" />
+            </div>
+            <div className="brand-row">
+              <div className="brand-label">Accent colour</div>
+              <div className="color-row">
+                {BRAND_COLORS.map(c => (
+                  <div key={c} className={`color-swatch ${brand.color === c ? "active" : ""}`}
+                    style={{ background: c }}
+                    onClick={() => setBrand(b => ({ ...b, color: c }))} />
+                ))}
+                <input type="color" value={brand.color}
+                  onChange={e => setBrand(b => ({ ...b, color: e.target.value }))}
+                  style={{ width: 28, height: 28, border: "none", borderRadius: "50%", cursor: "pointer", padding: 0, background: "none" }} />
+              </div>
+            </div>
+            <div className="brand-row" style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 0 }}>
+              <div className="brand-label">Show Vouch watermark</div>
+              <div style={{ position: "relative", width: 36, height: 20, cursor: "pointer" }}
+                onClick={() => setBrand(b => ({ ...b, showLogo: !b.showLogo }))}>
+                <div style={{ position: "absolute", inset: 0, background: brand.showLogo ? brand.color : "#2a2a2a", borderRadius: 99, transition: "background 0.2s" }} />
+                <div style={{ position: "absolute", top: 3, left: brand.showLogo ? 18 : 3, width: 14, height: 14, background: "#fff", borderRadius: "50%", transition: "left 0.2s" }} />
+              </div>
+            </div>
+          </div>
+
+          <div className="editor-sidebar-section" style={{ flex: 1 }}>
+            <div className="editor-sidebar-label">Testimonial Quote</div>
+            <div style={{ color: "#888", fontSize: "0.85rem", lineHeight: 1.6, fontStyle: "italic", fontFamily: "Instrument Serif, serif" }}>
+              "{quote}"
+            </div>
+            <div style={{ marginTop: 16, color: "#555", fontSize: "0.8rem" }}>
+              ★★★★★ · {testimonial.campaign || "Campaign"}
+            </div>
+          </div>
+
+          <button className="export-btn" onClick={handleExport} disabled={exporting}>
+            {exporting ? "⏳ Exporting…" : exportDone ? "✓ Downloaded!" : "⬇ Export Video"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Video Playback Modal ──────────────────────────────────────────────────────
+function VideoPlaybackModal({ testimonial, onClose }) {
+  const videoURLs = testimonial.videoURLs || {};
+  const keys = Object.keys(videoURLs);
+  const [activeIdx, setActiveIdx] = useState(keys[0] || null);
+  const prompts = testimonial.prompts || [];
+
+  if (keys.length === 0) return null;
+
+  return (
+    <div className="video-modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="video-modal">
+        <div className="video-modal-header">
+          <div className="video-modal-title">
+            {testimonial.name} — Video Responses
+          </div>
+          <button className="btn btn-outline btn-sm" onClick={onClose} style={{ border: "1px solid #333", color: "#888" }}>✕</button>
+        </div>
+
+        {keys.length > 1 && (
+          <div className="video-clip-tabs">
+            {keys.map(idx => (
+              <button key={idx} className={`video-clip-tab ${activeIdx === idx ? "active" : ""}`}
+                onClick={() => setActiveIdx(idx)}>
+                Q{Number(idx)+1}
+                {prompts[idx] && <span style={{ display: "block", fontSize: "0.72rem", opacity: 0.7, maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{prompts[idx]}</span>}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {activeIdx !== null && videoURLs[activeIdx] && (
+          <video key={activeIdx} src={videoURLs[activeIdx]} controls autoPlay
+            style={{ width: "100%", borderRadius: 10, background: "#000" }} />
+        )}
+
+        {prompts[activeIdx] && (
+          <div style={{ marginTop: 14, color: "#888", fontSize: "0.85rem", lineHeight: 1.5 }}>
+            <span style={{ color: "var(--gold)", fontWeight: 600 }}>Q: </span>{prompts[activeIdx]}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Prompt templates ──────────────────────────────────────────────────────────
+const PROMPT_TEMPLATES = [
+  {
+    label: "Marketing Agency", emoji: "📣",
+    prompts: [
+      "What were you struggling with before you started working with us?",
+      "What results have you seen since we started working together?",
+      "Was there a specific campaign or moment that really stood out to you?",
+      "What would you tell another business owner thinking about working with us?",
+    ]
+  },
+  {
+    label: "Consultant", emoji: "🧠",
+    prompts: [
+      "What problem were you trying to solve when you first reached out?",
+      "How has your thinking or strategy changed since working together?",
+      "What was the most valuable thing you got from our work together?",
+      "Who would you recommend us to, and why?",
+    ]
+  },
+  {
+    label: "SaaS / Software", emoji: "💻",
+    prompts: [
+      "What were you using before, and what wasn't working about it?",
+      "What does your workflow look like now compared to before?",
+      "What feature or outcome surprised you the most?",
+      "What would you say to someone on the fence about trying it?",
+    ]
+  },
+  {
+    label: "E-commerce", emoji: "🛍️",
+    prompts: [
+      "What made you decide to buy from us over other options?",
+      "How has the product lived up to your expectations?",
+      "What's one thing you'd tell a friend who was thinking of buying?",
+      "Would you shop with us again — and why?",
+    ]
+  },
+  {
+    label: "Coaching", emoji: "🎯",
+    prompts: [
+      "Where were you in life or business before we started working together?",
+      "What's the biggest shift or breakthrough you've experienced?",
+      "How would you describe the coaching experience itself?",
+      "Who do you think would benefit most from working with this coach?",
+    ]
+  },
+];
+
+// ── Dashboard ──────────────────────────────────────────────────────────────
+function Dashboard({ onPreview, userId }) {
+  const [innerTab, setInnerTab] = useState("campaigns");
+  const [inviteTarget, setInviteTarget] = useState(null);
+  const [playbackTarget, setPlaybackTarget] = useState(null);
+  const [editTarget, setEditTarget] = useState(null);
+  // In production these would be fetched from Firestore filtered by userId.
+  // For now we seed per-user state from localStorage so data persists across sessions.
+  const storageKey = `vouch_campaigns_${userId}`;
+  const testimonialsKey = `vouch_testimonials_${userId}`;
+
+  const [campaigns, setCampaigns] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(storageKey)) || []; } catch { return []; }
+  });
+  const [testimonials, setTestimonials] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(testimonialsKey)) || MOCK_TESTIMONIALS; } catch { return MOCK_TESTIMONIALS; }
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem(storageKey, JSON.stringify(campaigns)); } catch {}
+  }, [campaigns, storageKey]);
+
+  useEffect(() => {
+    try { localStorage.setItem(testimonialsKey, JSON.stringify(testimonials)); } catch {}
+  }, [testimonials, testimonialsKey]);
+  const [showCreate, setShowCreate] = useState(false);
+
+  // New campaign form
+  const [form, setForm] = useState({ name: "", companyName: "", industry: "", context: "" });
+  const [prompts, setPrompts] = useState([]);
+  const [generating, setGenerating] = useState(false);
+  const [copiedId, setCopiedId] = useState(null);
+
+  async function handleGenerate() {
+    if (!form.companyName || !form.industry) return;
+    setGenerating(true);
+    try {
+      const p = await generatePrompts(form.companyName, form.industry, form.context);
+      setPrompts(p);
+    } catch {
+      setPrompts([
+        "What challenge brought you to us, and what made you decide to reach out?",
+        "What results or changes have you noticed since working with us?",
+        "Was there a specific moment that stood out to you during our work together?",
+        "What would you tell a friend or colleague who was considering working with us?"
+      ]);
+    }
+    setGenerating(false);
+  }
+
+  function saveCampaign() {
+    const c = { id: Date.now(), ...form, prompts };
+    setCampaigns(prev => [...prev, c]);
+    setForm({ name: "", companyName: "", industry: "", context: "" });
+    setPrompts([]);
+    setShowCreate(false);
+  }
+
+  function copyLink(id) {
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  }
+
+  return (
+    <div className="dashboard">
+      {inviteTarget && <InviteModal campaign={inviteTarget} onClose={() => setInviteTarget(null)} />}
+      {playbackTarget && <VideoPlaybackModal testimonial={playbackTarget} onClose={() => setPlaybackTarget(null)} />}
+      {editTarget && <VideoEditor testimonial={editTarget} onClose={() => setEditTarget(null)} />}
+      <div className="dash-header">
+        <div className="dash-title serif">Your Dashboard</div>
+        <div className="dash-subtitle">Manage campaigns and review incoming testimonials</div>
+      </div>
+
+      <div className="stats-row">
+        <div className="stat-card">
+          <div className="stat-num serif">{campaigns.length}</div>
+          <div className="stat-label">Active Campaigns</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-num serif">{testimonials.length}</div>
+          <div className="stat-label">Testimonials Received</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-num serif">{testimonials.filter(t => t.status === "approved").length}</div>
+          <div className="stat-label">Approved & Ready</div>
+        </div>
+      </div>
+
+      <div className="tabs-inner">
+        {["campaigns", "testimonials"].map(t => (
+          <button key={t} className={`tab-inner ${innerTab === t ? "active" : ""}`} onClick={() => setInnerTab(t)}>
+            {t === "campaigns" ? "📋 Campaigns" : "⭐ Testimonials"}
+          </button>
+        ))}
+      </div>
+
+      {/* Campaigns tab */}
+      {innerTab === "campaigns" && (
+        <>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+            <div className="section-title serif" style={{ margin: 0 }}>Campaigns</div>
+            <button className="btn btn-primary" onClick={() => setShowCreate(!showCreate)}>
+              {showCreate ? "✕ Cancel" : "+ New Campaign"}
+            </button>
+          </div>
+
+          {showCreate && (
+            <div className="campaign-card" style={{ border: "1.5px solid var(--gold)" }}>
+              <div style={{ fontWeight: 600, marginBottom: 20, fontSize: "1.05rem" }}>Create New Campaign</div>
+              <div className="form-row">
+                <div className="field">
+                  <label>Campaign Name</label>
+                  <input value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Q1 Social Proof" />
+                </div>
+                <div className="field">
+                  <label>Your Business Name</label>
+                  <input value={form.companyName} onChange={e => setForm(p => ({ ...p, companyName: e.target.value }))} placeholder="e.g. Acme Agency" />
+                </div>
+              </div>
+              <div className="field" style={{ marginBottom: 16 }}>
+                <label>Industry / Niche</label>
+                <input value={form.industry} onChange={e => setForm(p => ({ ...p, industry: e.target.value }))} placeholder="e.g. Digital Marketing Agency" />
+              </div>
+              <div className="field" style={{ marginBottom: 20 }}>
+                <label>Extra context (optional)</label>
+                <textarea rows={2} value={form.context} onChange={e => setForm(p => ({ ...p, context: e.target.value }))}
+                  placeholder="What service did customers use? What results do you want them to talk about?" />
+              </div>
+
+              {/* Template picker */}
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>
+                  Start with a template
+                </div>
+                <div className="template-grid">
+                  {PROMPT_TEMPLATES.map((t, i) => (
+                    <button key={i} className={`template-chip ${prompts.length > 0 && JSON.stringify(prompts) === JSON.stringify(t.prompts) ? "active" : ""}`}
+                      onClick={() => setPrompts(t.prompts)}>
+                      {t.emoji} {t.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 4 }}>
+                <button className="btn btn-gold" onClick={handleGenerate}
+                  disabled={generating || !form.companyName || !form.industry}>
+                  {generating ? <><span className="loading-dots">✦ Generating</span></> : "✦ Generate with AI"}
+                </button>
+                <span style={{ color: "var(--muted)", fontSize: "0.8rem" }}>or pick a template above</span>
+              </div>
+
+              {generating && (
+                <div className="ai-generating"><div className="ai-spinner" /> AI is crafting questions for your business…</div>
+              )}
+
+              {prompts.length > 0 && (
+                <>
+                  <div style={{ marginTop: 20, marginBottom: 8, fontWeight: 600, fontSize: "0.88rem" }}>Generated Questions — click to edit</div>
+                  <div className="prompts-box">
+                    {prompts.map((p, i) => (
+                      <div key={i} className="prompt-item">
+                        <div className="prompt-num">{i + 1}</div>
+                        <div className="prompt-text">
+                          <input value={p} onChange={e => setPrompts(prev => prev.map((q, j) => j === i ? e.target.value : q))} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <button className="btn btn-primary" style={{ marginTop: 20 }}
+                    disabled={!form.name} onClick={saveCampaign}>
+                    Save Campaign →
+                  </button>
+                  {!form.name && <span style={{ color: "var(--muted)", fontSize: "0.82rem", marginLeft: 12 }}>Add a campaign name to save</span>}
+                </>
+              )}
+            </div>
+          )}
+
+          <div className="testimonials-grid">
+            {campaigns.map(c => (
+              <div key={c.id} className="campaign-card" style={{ display: "block" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+                  <div>
+                    <div style={{ fontWeight: 600, marginBottom: 3 }}>{c.name}</div>
+                    <div style={{ color: "var(--muted)", fontSize: "0.82rem" }}>{c.companyName} · {c.industry}</div>
+                  </div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button className="btn btn-outline btn-sm" onClick={() => onPreview(c)}>Preview</button>
+                    <button className="btn btn-gold btn-sm" onClick={() => setInviteTarget(c)}>✉ Invite Client</button>
+                    <button className="btn btn-primary btn-sm" onClick={() => copyLink(c.id)}>
+                      {copiedId === c.id ? "✓ Copied!" : "Copy Link"}
+                    </button>
+                  </div>
+                </div>
+                <div style={{ color: "var(--muted)", fontSize: "0.8rem", marginBottom: 10 }}>{c.prompts.length} questions</div>
+                <div className="link-box">
+                  <span className="link-url">vouch.app/record/{c.id}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* Testimonials tab */}
+      {innerTab === "testimonials" && (
+        <>
+          <div className="section-title serif">Received Testimonials</div>
+          {testimonials.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-icon">💬</div>
+              <div className="empty-title">No testimonials yet</div>
+              <div>Share a campaign link to start collecting.</div>
+            </div>
+          ) : (
+            <div className="testimonials-grid">
+              {testimonials.map(t => (
+                <div key={t.id} className="testimonial-card">
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+                      <div className="t-name">{t.name}</div>
+                      <span className={`badge badge-${t.status}`}>{t.status}</span>
+                    </div>
+                    <div className="t-company">{t.company} · {t.campaign}</div>
+                    <div className="t-stars">{"★".repeat(t.rating)}{"☆".repeat(5 - t.rating)}</div>
+                    <div className="t-quote">"{t.quote}"</div>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {t.status === "new" && (
+                      <button className="btn btn-sm btn-gold"
+                        onClick={() => setTestimonials(prev => prev.map(x => x.id === t.id ? { ...x, status: "approved" } : x))}>
+                        Approve
+                      </button>
+                    )}
+                    {t.status === "approved" && (
+                      <button className="btn btn-sm btn-gold" onClick={() => setEditTarget(t)}>
+                        ✂ Edit
+                      </button>
+                    )}
+                    {t.videoURLs && Object.keys(t.videoURLs).length > 0 && (
+                      <button className="btn btn-sm btn-primary" onClick={() => setPlaybackTarget(t)}>
+                        ▶ Watch
+                      </button>
+                    )}
+                    <button className="btn btn-sm btn-outline">Export</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── Auth Screen ───────────────────────────────────────────────────────────────
+function AuthScreen({ auth }) {
+  const [mode, setMode] = useState("login"); // "login" | "signup" | "reset"
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [resetSent, setResetSent] = useState(false);
+
+  async function handleSubmit() {
+    setError(""); setLoading(true);
+    try {
+      if (mode === "login") await signIn(auth, email, password);
+      else if (mode === "signup") await signUp(auth, email, password);
+      else {
+        await sendPasswordReset(auth, email);
+        setResetSent(true);
+      }
+    } catch (e) {
+      setError(friendlyAuthError(e.code));
+    }
+    setLoading(false);
+  }
+
+  function switchMode(m) {
+    setMode(m); setError(""); setResetSent(false);
+  }
+
+  const isReset = mode === "reset";
+  const isSignup = mode === "signup";
+
+  return (
+    <div className="auth-page">
+      {/* Left panel — brand / testimonial */}
+      <div className="auth-panel">
+        <div className="auth-panel-bg" />
+        <div className="auth-panel-logo">Vouch✦</div>
+        <div className="auth-panel-quote">
+          <div className="auth-panel-stars">★★★★★</div>
+          <div className="auth-panel-q">
+            "We went from chasing testimonials to having a consistent stream of polished video proof — in weeks."
+          </div>
+          <div className="auth-panel-attr">— James R., Founder at Clearpath Agency</div>
+        </div>
+      </div>
+
+      {/* Right panel — form */}
+      <div className="auth-form-side">
+        <div className="auth-form-box">
+          <div className="auth-title">
+            {isReset ? "Reset password" : isSignup ? "Create account" : "Welcome back"}
+          </div>
+          <div className="auth-sub">
+            {isReset
+              ? "We'll email you a link to reset your password."
+              : isSignup
+              ? "Start collecting video testimonials that actually convert."
+              : "Sign in to your Vouch dashboard."}
+          </div>
+
+          {error && <div className="auth-error">⚠ {error}</div>}
+          {resetSent && <div className="auth-success">✓ Reset link sent — check your inbox.</div>}
+
+          <div className="field" style={{ marginBottom: 14 }}>
+            <label>Email</label>
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+              placeholder="you@company.com"
+              onKeyDown={e => e.key === "Enter" && !isReset && handleSubmit()} />
+          </div>
+
+          {!isReset && (
+            <div className="field" style={{ marginBottom: isSignup ? 20 : 8 }}>
+              <label>Password</label>
+              <input type="password" value={password} onChange={e => setPassword(e.target.value)}
+                placeholder={isSignup ? "Min. 6 characters" : "••••••••"}
+                onKeyDown={e => e.key === "Enter" && handleSubmit()} />
+            </div>
+          )}
+
+          {mode === "login" && (
+            <div className="auth-forgot">
+              <button onClick={() => switchMode("reset")}>Forgot password?</button>
+            </div>
+          )}
+
+          <button className="btn btn-primary" style={{ width: "100%", justifyContent: "center", marginBottom: 8 }}
+            disabled={loading || (!email) || (!isReset && !password)}
+            onClick={handleSubmit}>
+            {loading ? "Please wait…" : isReset ? "Send reset link" : isSignup ? "Create account" : "Sign in"}
+          </button>
+
+          <div className="auth-switch">
+            {isReset ? (
+              <><span>Remembered it? </span><button onClick={() => switchMode("login")}>Back to sign in</button></>
+            ) : isSignup ? (
+              <><span>Already have an account? </span><button onClick={() => switchMode("login")}>Sign in</button></>
+            ) : (
+              <><span>Don't have an account? </span><button onClick={() => switchMode("signup")}>Sign up free</button></>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── User Menu (nav dropdown) ──────────────────────────────────────────────────
+function UserMenu({ user, auth }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  const initials = user.email ? user.email[0].toUpperCase() : "?";
+
+  useEffect(() => {
+    function handler(e) { if (ref.current && !ref.current.contains(e.target)) setOpen(false); }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  return (
+    <div className="user-menu" ref={ref}>
+      <button className="user-btn" onClick={() => setOpen(v => !v)}>
+        <div className="user-avatar">{initials}</div>
+        <span style={{ maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {user.email}
+        </span>
+        <span style={{ color: "var(--muted)", fontSize: "0.7rem" }}>{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div className="user-dropdown">
+          <div className="user-dropdown-email">{user.email}</div>
+          <button className="user-dropdown-item danger" onClick={() => { setOpen(false); signOut(auth); }}>
+            Sign out
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Root App ──────────────────────────────────────────────────────────────────
+const DEMO_USER = { uid: "demo", email: "demo@vouch.app", displayName: "Demo User" };
+
+const BASE_PRICES = { starter: 497, growth: 997, agency: 1997 };
+const CURRENCIES_MAP = {
+  GB: { symbol: "£", flag: "🇬🇧", rate: 1 },
+  US: { symbol: "$", flag: "🇺🇸", rate: 1.27 },
+  CA: { symbol: "CA$", flag: "🇨🇦", rate: 1.72 },
+  AU: { symbol: "A$", flag: "🇦🇺", rate: 1.94 },
+  EU: { symbol: "€", flag: "🇪🇺", rate: 1.17 },
+  IN: { symbol: "₹", flag: "🇮🇳", rate: 52, discount: 0.5 },
+};
+const EU_CODES = ["DE","FR","IT","ES","NL","BE","AT","PT","IE","FI","GR","PL","CZ","RO","HU","SK","SI","HR","LT","LV","EE","LU","MT","CY","DK","SE"];
+
+function fmtPrice(base, cur) {
+  const raw = base * cur.rate * (cur.discount || 1);
+  return cur.symbol + Math.ceil(raw / 10) * 10 - 3;
+}
+
+function InAppPricing({ onGetStarted }) {
+  const [cur, setCur] = useState(CURRENCIES_MAP.GB);
+  const [detected, setDetected] = useState(false);
+
+  useEffect(() => {
+    fetch("https://ipapi.co/json/", { signal: AbortSignal.timeout(4000) })
+      .then(r => r.json())
+      .then(d => {
+        const code = EU_CODES.includes(d.country_code) ? "EU" : d.country_code;
+        setCur(CURRENCIES_MAP[code] || CURRENCIES_MAP.GB);
+        setDetected(true);
+      }).catch(() => setDetected(true));
+  }, []);
+
+  const plans = [
+    { id: "starter", name: "Starter", base: 497, popular: false, color: "var(--card)",
+      features: ["3 video testimonials / month", "Branded invite emails", "AI-generated prompts", "Basic captions & editing", "Email support"] },
+    { id: "growth", name: "Growth", base: 997, popular: true, color: "var(--ink)",
+      features: ["8 video testimonials / month", "Priority 5-day turnaround", "Social clips (3 formats)", "Custom branding & captions", "Follow-up sequences", "Slack support"] },
+    { id: "agency", name: "Agency", base: 1997, popular: false, color: "var(--card)",
+      features: ["Unlimited testimonials", "White-label platform", "Custom domain & branding", "Dedicated account manager", "Analytics dashboard", "Phone support"] },
+  ];
+
+  return (
+    <div style={{ minHeight: "100vh", background: "var(--paper)", fontFamily: "DM Sans, sans-serif" }}>
+      {/* Nav */}
+      <nav className="nav">
+        <div className="nav-logo serif">Vouch<span style={{ color: "var(--gold)" }}>✦</span></div>
+        <button className="btn btn-outline btn-sm" onClick={onGetStarted}>Sign in</button>
+      </nav>
+
+      {/* Hero */}
+      <div style={{ textAlign: "center", padding: "64px 24px 40px" }}>
+        <div style={{ display: "inline-block", padding: "5px 16px", borderRadius: 20, border: "1px solid var(--border)", background: "var(--cream)", fontSize: "0.75rem", color: "var(--muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 24 }}>
+          Simple pricing
+        </div>
+        <div style={{ fontFamily: "Instrument Serif, serif", fontSize: "clamp(2.2rem, 6vw, 3.8rem)", lineHeight: 1.1, marginBottom: 16, letterSpacing: "-0.02em" }}>
+          Testimonials that<br /><em style={{ color: "var(--gold)", fontStyle: "italic" }}>actually convert</em>
+        </div>
+        <div style={{ color: "var(--muted)", fontSize: "1rem", maxWidth: 480, margin: "0 auto 24px", lineHeight: 1.6 }}>
+          Done-for-you video testimonials. We collect, edit, and deliver — you publish.
+        </div>
+        <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "7px 16px", borderRadius: 20, background: "#fdf6e8", border: "1px solid #e8d4a8", color: "var(--gold)", fontSize: "0.82rem", fontWeight: 500 }}>
+          {cur.flag} Prices in {cur.symbol === "£" ? "GBP" : cur.symbol === "$" ? "USD" : cur.symbol === "€" ? "EUR" : "your currency"}
+          {!detected && " · detecting…"}
+        </div>
+      </div>
+
+      {/* Plans */}
+      <div style={{ maxWidth: 960, margin: "0 auto", padding: "0 20px 60px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16, alignItems: "start" }}>
+        {plans.map((p, i) => (
+          <div key={p.id} style={{
+            background: p.popular ? "var(--ink)" : "var(--card)",
+            border: p.popular ? "2px solid var(--gold)" : "1px solid var(--border)",
+            borderRadius: 18, overflow: "hidden",
+            transform: p.popular ? "scale(1.03)" : "none",
+            boxShadow: p.popular ? "0 12px 40px rgba(0,0,0,0.18)" : "none",
+          }}>
+            {p.popular && (
+              <div style={{ background: "var(--gold)", color: "#fff", textAlign: "center", padding: "7px", fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em" }}>
+                ✦ Most Popular
+              </div>
+            )}
+            <div style={{ padding: "28px 24px" }}>
+              <div style={{ fontSize: "0.72rem", fontWeight: 700, color: p.popular ? "#888" : "var(--muted)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>{p.name}</div>
+              <div style={{ fontFamily: "Instrument Serif, serif", fontSize: "2.8rem", fontWeight: 600, color: p.popular ? "#fff" : "var(--ink)", lineHeight: 1, marginBottom: 4 }}>
+                {fmtPrice(p.base, cur)}
+              </div>
+              <div style={{ fontSize: "0.8rem", color: p.popular ? "#666" : "var(--muted)", marginBottom: 20, paddingBottom: 20, borderBottom: `1px solid ${p.popular ? "#2a2a2a" : "var(--border)"}` }}>
+                per month
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
+                {p.features.map((f, fi) => (
+                  <div key={fi} style={{ display: "flex", gap: 10, alignItems: "flex-start", fontSize: "0.88rem", color: p.popular ? "#ccc" : "#333" }}>
+                    <span style={{ width: 18, height: 18, borderRadius: "50%", background: p.popular ? "#1e1e1e" : "var(--gold-pale, #fdf6e8)", color: "var(--gold)", fontSize: "0.62rem", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>✓</span>
+                    {f}
+                  </div>
+                ))}
+              </div>
+              <button className="btn" style={{
+                width: "100%", justifyContent: "center",
+                background: p.popular ? "var(--gold)" : "transparent",
+                color: p.popular ? "#fff" : "var(--ink)",
+                border: p.popular ? "none" : "1.5px solid var(--border)",
+              }} onClick={onGetStarted}>
+                {p.id === "agency" ? "Talk to Us" : "Get Started"}
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Guarantee */}
+      <div style={{ textAlign: "center", padding: "20px 24px 60px", color: "var(--muted)", fontSize: "0.85rem" }}>
+        🛡 30-day money-back guarantee · No contracts · Cancel anytime
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  const { user, auth, storage, loading } = useAuth();
+  const [demoMode, setDemoMode] = useState(false);
+  const [view, setView] = useState("pricing"); // start on pricing
+  const [previewCampaign, setPreviewCampaign] = useState(null);
+
+  const activeUser = demoMode ? DEMO_USER : user;
+
+  function handlePreview(campaign) {
+    setPreviewCampaign(campaign);
+    setView("client");
+  }
+
+  // Loading state
+  if (loading && !demoMode) {
+    return (
+      <>
+        <style>{style}</style>
+        <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--paper)" }}>
+          <div style={{ textAlign: "center" }}>
+            <div style={{ fontFamily: "Instrument Serif, serif", fontSize: "1.8rem", color: "var(--gold)", fontStyle: "italic", marginBottom: 24 }}>Vouch✦</div>
+            <div className="ai-spinner" style={{ margin: "0 auto 24px", borderTopColor: "#c8a96e", borderColor: "#ddd8cc" }} />
+            <div style={{ color: "var(--muted)", fontSize: "0.85rem", marginBottom: 20 }}>Connecting…</div>
+            <button className="btn btn-gold" onClick={() => setDemoMode(true)}>Try Demo Instead →</button>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  // Pricing page (unauthenticated landing)
+  if (!activeUser && view === "pricing") {
+    return (
+      <>
+        <style>{style}</style>
+        <InAppPricing onGetStarted={() => setView("auth")} />
+        <div style={{ position: "fixed", bottom: 20, right: 20, zIndex: 50 }}>
+          <button className="btn btn-gold btn-sm" onClick={() => setDemoMode(true)}>✦ Try Demo</button>
+        </div>
+      </>
+    );
+  }
+
+  // Auth screen
+  if (!activeUser) {
+    return (
+      <>
+        <style>{style}</style>
+        <div style={{ position: "relative" }}>
+          <AuthScreen auth={auth} />
+          <div style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", zIndex: 50, display: "flex", gap: 10 }}>
+            <button className="btn btn-outline" style={{ background: "var(--paper)", fontSize: "0.82rem" }} onClick={() => setView("pricing")}>← Pricing</button>
+            <button className="btn btn-outline" style={{ background: "var(--paper)", fontSize: "0.82rem" }} onClick={() => setDemoMode(true)}>✦ Skip — try demo</button>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  // Signed in — show app
+  return (
+    <>
+      <style>{style}</style>
+      <div className="app">
+        {view === "client" ? (
+          <ClientPage campaign={previewCampaign} onBack={() => { setView("dashboard"); setPreviewCampaign(null); }} storage={storage} userId={activeUser.uid} />
+        ) : (
+          <>
+            <nav className="nav">
+              <div className="nav-logo serif">Vouch<span>✦</span></div>
+              <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+                <div className="nav-tabs">
+                  <button className={`nav-tab ${view === "dashboard" ? "active" : ""}`} onClick={() => setView("dashboard")}>Dashboard</button>
+                  <button className="nav-tab" onClick={() => handlePreview(null)}>Client View</button>
+                </div>
+                {demoMode ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: "0.75rem", color: "var(--muted)", background: "var(--cream)", padding: "4px 10px", borderRadius: 20 }}>Demo mode</span>
+                    <button className="btn btn-outline btn-sm" onClick={() => { setDemoMode(false); setView("auth"); }}>Sign in</button>
+                  </div>
+                ) : (
+                  <UserMenu user={activeUser} auth={auth} />
+                )}
+              </div>
+            </nav>
+            <Dashboard onPreview={handlePreview} userId={activeUser.uid} />
+          </>
+        )}
+      </div>
+    </>
+  );
+}
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(React.createElement(App));
+  </script>
+</body>
 </html>
