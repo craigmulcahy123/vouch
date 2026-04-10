@@ -4,9 +4,14 @@ module.exports = async function handler(req, res) {
   }
 
   const { businessName, industry, context } = req.body;
+  console.log("[generate-prompts] request body:", { businessName, industry, context });
+
   if (!businessName || !industry) {
+    console.log("[generate-prompts] missing required fields");
     return res.status(400).json({ error: "businessName and industry are required" });
   }
+
+  console.log("[generate-prompts] ANTHROPIC_API_KEY present:", !!process.env.ANTHROPIC_API_KEY);
 
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -34,13 +39,19 @@ Respond ONLY with a JSON array of 4 strings, no markdown, no explanation. Exampl
     }),
   });
 
+  console.log("[generate-prompts] Anthropic response status:", response.status);
+
   if (!response.ok) {
     const err = await response.json();
+    console.log("[generate-prompts] Anthropic error:", JSON.stringify(err));
     return res.status(response.status).json({ error: err.error?.message || "Anthropic API error" });
   }
 
   const data = await response.json();
+  console.log("[generate-prompts] Anthropic response body:", JSON.stringify(data));
+
   const text = data.content.map((b) => b.text || "").join("");
   const prompts = JSON.parse(text.replace(/```json|```/g, "").trim());
+  console.log("[generate-prompts] parsed prompts:", prompts);
   return res.status(200).json({ prompts });
 }
