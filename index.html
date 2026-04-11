@@ -19,7 +19,6 @@
     const { useState, useRef, useEffect } = React;
 
 
-const ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages";
 
 // ── Firebase config ───────────────────────────────────────────────────────────
 // Replace these values with your own from Firebase Console →
@@ -652,53 +651,36 @@ const MOCK_TESTIMONIALS = [
 ];
 
 // ── AI helpers ────────────────────────────────────────────────────────────────
-async function generatePrompts(businessName, industry, context) {
-  const response = await fetch(ANTHROPIC_API_URL, {
+async function callClaude(action, params) {
+  const res = await fetch("/api/claude", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 1000,
-      messages: [{
-        role: "user",
-        content: `You are helping generate video testimonial prompts for a business.
-
-Business: ${businessName}
-Industry: ${industry}
-Extra context: ${context || "None"}
-
-Generate exactly 4 short, conversational video testimonial questions that will help customers share genuine, compelling stories. Each question should be easy to answer naturally on camera — not corporate or stiff.
-
-Respond ONLY with a JSON array of 4 strings, no markdown, no explanation. Example format:
-["Question 1?","Question 2?","Question 3?","Question 4?"]`
-      }]
-    })
+    body: JSON.stringify({ action, ...params }),
   });
-  const data = await response.json();
-  const text = data.content.map(b => b.text || "").join("");
-  return JSON.parse(text.replace(/```json|```/g, "").trim());
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || "AI request failed");
+  }
+  const { text } = await res.json();
+  return text;
+}
+
+async function generatePrompts(businessName, industry, context) {
+  const res = await fetch("/api/generate-prompts", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ businessName, industry, context }),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.error || "Failed to generate prompts");
+  }
+  const { prompts } = await res.json();
+  return prompts;
 }
 
 async function analyzeTestimonial(answers, prompts) {
-  const combined = prompts.map((p, i) => `Q: ${p}\nA: ${answers[i] || "(no answer)"}`).join("\n\n");
-  const response = await fetch(ANTHROPIC_API_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 400,
-      messages: [{
-        role: "user",
-        content: `Based on these testimonial answers, write a single compelling 2-3 sentence testimonial quote in the customer's voice. Make it sound natural, genuine, and specific — not generic marketing speak.
-
-${combined}
-
-Respond with ONLY the quote text, no quotation marks, no explanation.`
-      }]
-    })
-  });
-  const data = await response.json();
-  return data.content.map(b => b.text || "").join("").trim();
+  return await callClaude("analyzeTestimonial", { answers, prompts });
 }
 
 // ── Email HTML builder ────────────────────────────────────────────────────────
@@ -753,31 +735,15 @@ function buildEmailHTML({ clientName, companyName, campaignName, prompts, record
 }
 
 // ── Send invite via Resend ────────────────────────────────────────────────────
-async function sendInviteEmail({ toEmail, clientName, campaign, resendApiKey }) {
-  const recordingLink = `https://vouch.app/record/${campaign.id}`;
-  const html = buildEmailHTML({
-    clientName,
-    companyName: campaign.companyName,
-    campaignName: campaign.name,
-    prompts: campaign.prompts,
-    recordingLink,
-  });
-  const res = await fetch("https://api.resend.com/emails", {
+async function sendInviteEmail({ toEmail, clientName, campaign }) {
+  const res = await fetch("/api/send-invite", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${resendApiKey}`,
-    },
-    body: JSON.stringify({
-      from: `${campaign.companyName} via Vouch <onboarding@resend.dev>`,
-      to: [toEmail],
-      subject: `${clientName}, share your experience with ${campaign.companyName}`,
-      html,
-    }),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ toEmail, clientName, campaign }),
   });
   if (!res.ok) {
     const err = await res.json();
-    throw new Error(err.message || "Failed to send email");
+    throw new Error(err.error || "Failed to send email");
   }
   return res.json();
 }
@@ -786,7 +752,6 @@ async function sendInviteEmail({ toEmail, clientName, campaign, resendApiKey }) 
 function InviteModal({ campaign, onClose }) {
   const [clientName, setClientName] = useState("");
   const [toEmail, setToEmail] = useState("");
-  const [apiKey, setApiKey] = useState("");
   const [status, setStatus] = useState(null); // null | "sending" | "success" | "error"
   const [errorMsg, setErrorMsg] = useState("");
   const [showPreview, setShowPreview] = useState(false);
@@ -794,10 +759,10 @@ function InviteModal({ campaign, onClose }) {
   const recordingLink = `https://vouch.app/record/${campaign.id}`;
 
   async function handleSend() {
-    if (!clientName || !toEmail || !apiKey) return;
+    if (!clientName || !toEmail) return;
     setStatus("sending");
     try {
-      await sendInviteEmail({ toEmail, clientName, campaign, resendApiKey: apiKey });
+      await sendInviteEmail({ toEmail, clientName, campaign });
       setStatus("success");
     } catch (e) {
       setErrorMsg(e.message);
@@ -821,13 +786,6 @@ function InviteModal({ campaign, onClose }) {
           <div className="field">
             <label>Client's Email</label>
             <input type="email" value={toEmail} onChange={e => setToEmail(e.target.value)} placeholder="sarah@example.com" />
-          </div>
-          <div className="field">
-            <label>Resend API Key</label>
-            <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="re_••••••••••••••••" />
-            <span style={{ fontSize: "0.76rem", color: "var(--muted)" }}>
-              Get your key at <a href="https://resend.com" target="_blank" rel="noreferrer" style={{ color: "var(--gold)" }}>resend.com</a> — free up to 3,000 emails/month.
-            </span>
           </div>
         </div>
 
@@ -874,7 +832,7 @@ function InviteModal({ campaign, onClose }) {
         <div className="modal-footer">
           <button className="btn btn-outline" onClick={onClose}>Cancel</button>
           <button className="btn btn-primary"
-            disabled={!clientName || !toEmail || !apiKey || status === "sending" || status === "success"}
+            disabled={!clientName || !toEmail || status === "sending" || status === "success"}
             onClick={handleSend}>
             {status === "sending" ? "Sending…" : status === "success" ? "✓ Sent!" : "Send Invite ✉"}
           </button>
@@ -1181,27 +1139,7 @@ function ClientPage({ campaign, onBack, storage, userId }) {
 
 // ── AI: suggest clip ranges from quote ───────────────────────────────────────
 async function suggestClips(quote, prompts) {
-  const response = await fetch(ANTHROPIC_API_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 600,
-      messages: [{
-        role: "user",
-        content: `You are a video editor assistant. Given this testimonial quote and the questions asked, suggest 3 short social media clip titles with a one-sentence description of what moment to highlight.
-
-Quote: "${quote}"
-Questions: ${prompts.join(" | ")}
-
-Respond ONLY with a JSON array of exactly 3 objects like:
-[{"title":"Clip title","desc":"What to highlight","emoji":"🎯"}]
-Use relevant emojis. No markdown, no explanation.`
-      }]
-    })
-  });
-  const data = await response.json();
-  const text = data.content.map(b => b.text || "").join("");
+  const text = await callClaude("suggestClips", { quote, prompts });
   return JSON.parse(text.replace(/```json|```/g, "").trim());
 }
 
@@ -1680,13 +1618,8 @@ function Dashboard({ onPreview, userId }) {
     try {
       const p = await generatePrompts(form.companyName, form.industry, form.context);
       setPrompts(p);
-    } catch {
-      setPrompts([
-        "What challenge brought you to us, and what made you decide to reach out?",
-        "What results or changes have you noticed since working with us?",
-        "Was there a specific moment that stood out to you during our work together?",
-        "What would you tell a friend or colleague who was considering working with us?"
-      ]);
+    } catch (e) {
+      alert("Failed to generate prompts: " + e.message);
     }
     setGenerating(false);
   }
