@@ -1124,9 +1124,11 @@ function ClientPage({ campaign, onBack, storage, userId }) {
                 </div>
               </div>
             )}
-            <button className="btn btn-outline" style={{ color: "#888", borderColor: "#333" }} onClick={onBack}>
-              ← Back to app
-            </button>
+            {onBack && (
+              <button className="btn btn-outline" style={{ color: "#888", borderColor: "#333" }} onClick={onBack}>
+                ← Back to app
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -2086,11 +2088,40 @@ function InAppPricing({ onGetStarted }) {
   );
 }
 
+function getCampaignFromUrl() {
+  const match = window.location.pathname.match(/^\/record\/([^/]+)/);
+  if (!match) return null;
+  const campaignId = match[1];
+  // Search all vouch_campaigns_* keys in localStorage
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (!key?.startsWith("vouch_campaigns_")) continue;
+    try {
+      const campaigns = JSON.parse(localStorage.getItem(key)) || [];
+      const found = campaigns.find(c => c.id === campaignId);
+      if (found) return found;
+    } catch {}
+  }
+  // Return a minimal shell so ClientPage still renders with the id
+  return { id: campaignId, name: "Testimonial", prompts: [] };
+}
+
 export default function App() {
   const { user, auth, storage, loading } = useAuth();
   const [demoMode, setDemoMode] = useState(false);
   const [view, setView] = useState("pricing"); // start on pricing
   const [previewCampaign, setPreviewCampaign] = useState(null);
+
+  // Public client recording route — bypass auth entirely
+  const recordCampaign = getCampaignFromUrl();
+  if (recordCampaign) {
+    return (
+      <>
+        <style>{style}</style>
+        <ClientPage campaign={recordCampaign} onBack={null} storage={storage} userId={null} />
+      </>
+    );
+  }
 
   const activeUser = demoMode ? DEMO_USER : user;
 
