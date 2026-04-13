@@ -861,6 +861,7 @@ function ClientPage({ campaign, onBack, storage, userId }) {
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
   const streamRef = useRef(null);
+  const [liveStream, setLiveStream] = useState(null);
 
   const prompts = campaign?.prompts || [];
   const hasVideos = Object.keys(videoBlobs).length > 0;
@@ -874,11 +875,19 @@ function ClientPage({ campaign, onBack, storage, userId }) {
       .catch(() => setCameraAvailable(false));
   }, []);
 
+  // Apply live stream to video element once it mounts
+  useEffect(() => {
+    if (!videoRef.current || !liveStream) return;
+    videoRef.current.srcObject = liveStream;
+    videoRef.current.play().catch(() => {});
+  }, [liveStream]);
+
   async function startRecording() {
     try {
+      setRecording(true);
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       streamRef.current = stream;
-      if (videoRef.current) { videoRef.current.srcObject = stream; videoRef.current.play(); }
+      setLiveStream(stream); // triggers effect to set srcObject once video element mounts
       const mr = new MediaRecorder(stream);
       mediaRecorderRef.current = mr;
       chunksRef.current = [];
@@ -888,13 +897,20 @@ function ClientPage({ campaign, onBack, storage, userId }) {
         const url = URL.createObjectURL(blob);
         setVideoURLs(prev => ({ ...prev, [selectedPrompt]: url }));
         setVideoBlobs(prev => ({ ...prev, [selectedPrompt]: blob }));
-        if (videoRef.current) { videoRef.current.srcObject = null; videoRef.current.src = url; }
+        setLiveStream(null);
+        if (videoRef.current) {
+          videoRef.current.srcObject = null;
+          videoRef.current.src = url;
+          videoRef.current.muted = false;
+          videoRef.current.controls = true;
+          videoRef.current.load();
+        }
         stream.getTracks().forEach(t => t.stop());
       };
       mr.start();
-      setRecording(true);
       setCameraAvailable(true);
     } catch {
+      setRecording(false);
       setCameraAvailable(false);
     }
   }
@@ -1010,13 +1026,13 @@ function ClientPage({ campaign, onBack, storage, userId }) {
               ) : (
                 <>
                   <div className="video-area" style={{ marginBottom: 14 }}>
-                    {!videoURLs[selectedPrompt] && !recording ? (
+                    {!(liveStream || videoURLs[selectedPrompt]) ? (
                       <div className="video-placeholder">
                         <div className="video-icon">🎥</div>
                         <div className="video-hint">{cameraAvailable === null ? "Checking camera…" : "Press record to answer on camera"}</div>
                       </div>
                     ) : (
-                      <video ref={videoRef} autoPlay={recording} muted={recording} controls={!recording} style={{ width: "100%", borderRadius: 12 }} src={videoURLs[selectedPrompt]} />
+                      <video ref={videoRef} autoPlay={!!liveStream} muted={!!liveStream} playsInline controls={!liveStream} style={{ width: "100%", borderRadius: 12 }} src={videoURLs[selectedPrompt] || ""} />
                     )}
                   </div>
                   <div className="rec-controls">
@@ -1967,7 +1983,7 @@ const EU_CODES = ["DE","FR","IT","ES","NL","BE","AT","PT","IE","FI","GR","PL","C
 
 function fmtPrice(base, cur) {
   const raw = base * cur.rate * (cur.discount || 1);
-  return cur.symbol + Math.ceil(raw / 10) * 10 - 3;
+  return cur.symbol + (Math.ceil(raw / 10) * 10 - 3);
 }
 
 function InAppPricing({ onGetStarted }) {
