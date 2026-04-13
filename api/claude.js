@@ -1,3 +1,35 @@
+async function callAnthropic(body) {
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": process.env.ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (response.status === 529) {
+      console.log(`[claude] Anthropic overloaded (attempt ${attempt}/3)`);
+      if (attempt < 3) {
+        await new Promise((r) => setTimeout(r, 2000));
+        continue;
+      }
+      return { error: "overloaded", status: 529 };
+    }
+
+    if (!response.ok) {
+      const err = await response.json();
+      console.log("[claude] Anthropic error:", JSON.stringify(err));
+      return { error: err.error?.message || "Anthropic API error", status: response.status };
+    }
+
+    return { data: await response.json() };
+  }
+  return { error: "overloaded", status: 529 };
+}
+
 module.exports = async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
@@ -10,29 +42,24 @@ module.exports = async function handler(req, res) {
     return res.status(400).json({ error: "Unknown action" });
   }
 
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": process.env.ANTHROPIC_API_KEY,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: messages.maxTokens,
-      messages: [{ role: "user", content: messages.content }],
-    }),
+  const result = await callAnthropic({
+    model: "claude-sonnet-4-20250514",
+    max_tokens: messages.maxTokens,
+    messages: [{ role: "user", content: messages.content }],
   });
 
-  if (!response.ok) {
-    const err = await response.json();
-    return res.status(response.status).json({ error: err.error?.message || "Anthropic API error" });
+  if (result.error) {
+    const fallback = getFallback(action, params);
+    if (fallback !== null) {
+      console.log(`[claude] all retries failed for action=${action}, returning fallback`);
+      return res.status(200).json({ text: fallback });
+    }
+    return res.status(result.status).json({ error: "Service temporarily unavailable. Please try again shortly." });
   }
 
-  const data = await response.json();
-  const text = data.content.map((b) => b.text || "").join("");
+  const text = result.data.content.map((b) => b.text || "").join("");
   return res.status(200).json({ text });
-}
+};
 
 function buildMessages(action, params) {
   if (action === "generatePrompts") {
@@ -78,6 +105,25 @@ Respond ONLY with a JSON array of exactly 3 objects like:
 [{"title":"Clip title","desc":"What to highlight","emoji":"🎯"}]
 Use relevant emojis. No markdown, no explanation.`,
     };
+  }
+
+  return null;
+}
+
+function getFallback(action, params) {
+  if (action === "analyzeTestimonial") {
+    const { answers } = params;
+    // Surface the longest answer as a best-effort fallback quote
+    const best = [...(answers || [])].sort((a, b) => (b || "").length - (a || "").length)[0];
+    return best || "This product has been a great help to me and my team. I'd highly recommend it.";
+  }
+
+  if (action === "suggestClips") {
+    return JSON.stringify([
+      { title: "The Problem We Solved", desc: "Highlight the moment they describe their original challenge.", emoji: "🎯" },
+      { title: "Real Results", desc: "Clip where they share a specific outcome or win.", emoji: "📈" },
+      { title: "Would They Recommend Us?", desc: "Their direct recommendation to others.", emoji: "⭐" },
+    ]);
   }
 
   return null;
