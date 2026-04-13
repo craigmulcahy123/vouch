@@ -36,11 +36,12 @@ const FIREBASE_CONFIG = {
 // Loads Firebase from CDN so no bundler/npm needed in this artifact context.
 let _auth = null;
 let _storage = null;
+let _db = null;
 let _fbReady = false;
 let _fbCallbacks = [];
 
 function onFirebaseReady(cb) {
-  if (_fbReady) { cb(_auth, _storage); return; }
+  if (_fbReady) { cb(_auth, _storage, _db); return; }
   _fbCallbacks.push(cb);
 }
 
@@ -60,12 +61,14 @@ function initFirebase() {
     load("https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"),
     load("https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"),
     load("https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"),
+    load("https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"),
   ]).then(() => {
     if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
     _auth = firebase.auth();
     _storage = firebase.storage();
+    _db = firebase.firestore();
     _fbReady = true;
-    _fbCallbacks.forEach(cb => cb(_auth, _storage));
+    _fbCallbacks.forEach(cb => cb(_auth, _storage, _db));
     _fbCallbacks = [];
   });
 }
@@ -75,17 +78,19 @@ function useAuth() {
   const [user, setUser] = useState(undefined); // undefined = loading
   const [auth, setAuth] = useState(null);
   const [storage, setStorage] = useState(null);
+  const [db, setDb] = useState(null);
 
   useEffect(() => {
     initFirebase();
-    onFirebaseReady((a, s) => {
+    onFirebaseReady((a, s, d) => {
       setAuth(a);
       setStorage(s);
+      setDb(d);
       a.onAuthStateChanged(u => setUser(u || null));
     });
   }, []);
 
-  return { user, auth, storage, loading: user === undefined };
+  return { user, auth, storage, db, loading: user === undefined };
 }
 
 async function signUp(auth, email, password) {
@@ -631,24 +636,6 @@ const style = `
   }
 `;
 
-// ── Mock data ─────────────────────────────────────────────────────────────────
-const MOCK_TESTIMONIALS = [
-  {
-    id: 1, name: "Sarah Chen", company: "Bright Agency", rating: 5,
-    quote: "The whole process was so smooth — I recorded it in 10 minutes and the final video looked genuinely professional. Our conversion rate went up noticeably after we added it to our landing page.",
-    status: "approved", campaign: "Agency Social Proof"
-  },
-  {
-    id: 2, name: "Marcus Powell", company: "Powell Consulting", rating: 5,
-    quote: "I've tried other platforms but nothing made it this easy for my clients to actually follow through and record something. The prompts really helped guide them.",
-    status: "new", campaign: "Consultant Pack"
-  },
-  {
-    id: 3, name: "Lena Marsh", company: "Ecom Ventures", rating: 4,
-    quote: "Great experience — the questions felt natural and it didn't feel like I was doing a scripted ad. Honestly surprised how good the end result looked.",
-    status: "pending", campaign: "Agency Social Proof"
-  }
-];
 
 // ── AI helpers ────────────────────────────────────────────────────────────────
 async function callClaude(action, params) {
@@ -861,7 +848,7 @@ function StarRating({ value, onChange }) {
 }
 
 // ── Client Recording Page ──────────────────────────────────────────────────
-function ClientPage({ campaign, onBack, storage, userId }) {
+function ClientPage({ campaign, onBack, storage, userId, db }) {
   const [step, setStep] = useState(0);
   const [selectedPrompt, setSelectedPrompt] = useState(0);
   const [answers, setAnswers] = useState({});
@@ -966,6 +953,27 @@ function ClientPage({ campaign, onBack, storage, userId }) {
     setSubmitPhase("analyzing");
     const quote = await analyzeTestimonial(answers, prompts);
     setGeneratedQuote(quote);
+
+    // Phase 3: save testimonial to Firestore
+    const ownerId = campaign?.ownerId;
+    if (db && ownerId) {
+      const tid = Date.now().toString();
+      try {
+        await db.collection("users").doc(ownerId).collection("testimonials").doc(tid).set({
+          id: tid,
+          name, company, rating,
+          answers,
+          videoURLs: { ...uploadedURLs, ...firebaseURLs },
+          quote,
+          campaignId: campaign.id,
+          campaignName: campaign.name || "",
+          status: "new",
+          createdAt: Date.now(),
+        });
+      } catch (e) {
+        console.error("Failed to save testimonial:", e);
+      }
+    }
 
     setSubmitting(false);
     setSubmitPhase("");
@@ -1596,30 +1604,25 @@ const PROMPT_TEMPLATES = [
 ];
 
 // ── Dashboard ──────────────────────────────────────────────────────────────
-function Dashboard({ onPreview, userId }) {
+function Dashboard({ onPreview, userId, db }) {
   const [innerTab, setInnerTab] = useState("campaigns");
   const [inviteTarget, setInviteTarget] = useState(null);
   const [playbackTarget, setPlaybackTarget] = useState(null);
   const [editTarget, setEditTarget] = useState(null);
-  // In production these would be fetched from Firestore filtered by userId.
-  // For now we seed per-user state from localStorage so data persists across sessions.
-  const storageKey = `vouch_campaigns_${userId}`;
-  const testimonialsKey = `vouch_testimonials_${userId}`;
 
-  const [campaigns, setCampaigns] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(storageKey)) || []; } catch { return []; }
-  });
-  const [testimonials, setTestimonials] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(testimonialsKey)) || MOCK_TESTIMONIALS; } catch { return MOCK_TESTIMONIALS; }
-  });
+  const [campaigns, setCampaigns] = useState([]);
+  const [testimonials, setTestimonials] = useState([]);
 
   useEffect(() => {
-    try { localStorage.setItem(storageKey, JSON.stringify(campaigns)); } catch {}
-  }, [campaigns, storageKey]);
-
-  useEffect(() => {
-    try { localStorage.setItem(testimonialsKey, JSON.stringify(testimonials)); } catch {}
-  }, [testimonials, testimonialsKey]);
+    if (!db || !userId) return;
+    const unsubCampaigns = db.collection("users").doc(userId).collection("campaigns")
+      .orderBy("createdAt", "desc")
+      .onSnapshot(snap => setCampaigns(snap.docs.map(d => d.data())));
+    const unsubTestimonials = db.collection("users").doc(userId).collection("testimonials")
+      .orderBy("createdAt", "desc")
+      .onSnapshot(snap => setTestimonials(snap.docs.map(d => d.data())));
+    return () => { unsubCampaigns(); unsubTestimonials(); };
+  }, [db, userId]);
   const [showCreate, setShowCreate] = useState(false);
 
   // New campaign form
@@ -1640,9 +1643,10 @@ function Dashboard({ onPreview, userId }) {
     setGenerating(false);
   }
 
-  function saveCampaign() {
-    const c = { id: Date.now(), ...form, prompts };
-    setCampaigns(prev => [...prev, c]);
+  async function saveCampaign() {
+    const id = Date.now().toString();
+    const c = { id, ownerId: userId, ...form, prompts, createdAt: Date.now() };
+    await db.collection("users").doc(userId).collection("campaigns").doc(id).set(c);
     setForm({ name: "", companyName: "", industry: "", context: "" });
     setPrompts([]);
     setShowCreate(false);
@@ -2106,10 +2110,46 @@ function InAppPricing({ onGetStarted }) {
 }
 
 function App() {
-  const { user, auth, storage, loading } = useAuth();
+  const { user, auth, storage, db, loading } = useAuth();
   const [demoMode, setDemoMode] = useState(false);
   const [view, setView] = useState("pricing"); // start on pricing
   const [previewCampaign, setPreviewCampaign] = useState(null);
+
+  // Public recording route — must be declared before any conditional returns
+  const recordCampaignId = window.location.pathname.match(/^\/record\/([^/]+)/)?.[1] || null;
+  const [recordCampaign, setRecordCampaign] = useState(undefined); // undefined = loading
+
+  useEffect(() => {
+    if (!recordCampaignId || !db) return;
+    db.collectionGroup("campaigns")
+      .where("id", "==", recordCampaignId)
+      .limit(1)
+      .get()
+      .then(snap => setRecordCampaign(
+        snap.empty ? { id: recordCampaignId, name: "Testimonial", prompts: [] }
+                   : snap.docs[0].data()
+      ))
+      .catch(() => setRecordCampaign({ id: recordCampaignId, name: "Testimonial", prompts: [] }));
+  }, [recordCampaignId, db]);
+
+  if (recordCampaignId) {
+    if (recordCampaign === undefined) {
+      return (
+        <>
+          <style>{style}</style>
+          <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0a0a0a" }}>
+            <div className="ai-spinner" style={{ borderTopColor: "#c8a96e", borderColor: "#333" }} />
+          </div>
+        </>
+      );
+    }
+    return (
+      <>
+        <style>{style}</style>
+        <ClientPage campaign={recordCampaign} onBack={null} storage={storage} userId={null} db={db} />
+      </>
+    );
+  }
 
   const activeUser = demoMode ? DEMO_USER : user;
 
@@ -2170,7 +2210,7 @@ function App() {
       <style>{style}</style>
       <div className="app">
         {view === "client" ? (
-          <ClientPage campaign={previewCampaign} onBack={() => { setView("dashboard"); setPreviewCampaign(null); }} storage={storage} userId={activeUser.uid} />
+          <ClientPage campaign={previewCampaign} onBack={() => { setView("dashboard"); setPreviewCampaign(null); }} storage={storage} userId={activeUser.uid} db={db} />
         ) : (
           <>
             <nav className="nav">
@@ -2190,7 +2230,7 @@ function App() {
                 )}
               </div>
             </nav>
-            <Dashboard onPreview={handlePreview} userId={activeUser.uid} />
+            <Dashboard onPreview={handlePreview} userId={activeUser.uid} db={db} />
           </>
         )}
       </div>
