@@ -1,8 +1,8 @@
 const FALLBACK_PROMPTS = [
-  "What problem were you trying to solve before you found us, and how has that changed?",
-  "Can you walk us through a specific moment where our product or service made a real difference for you?",
-  "What would you tell a friend or colleague who's on the fence about working with us?",
-  "How has working with us impacted your day-to-day — what does that actually look like in practice?",
+  "What challenge brought you to us and what made you decide to reach out?",
+  "What results have you seen since working together?",
+  "Was there a specific moment that stood out during our work together?",
+  "What would you tell someone considering working with us?",
 ];
 
 async function callAnthropic(body) {
