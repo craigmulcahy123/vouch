@@ -1612,15 +1612,22 @@ function Dashboard({ onPreview, userId, db }) {
 
   const [campaigns, setCampaigns] = useState([]);
   const [testimonials, setTestimonials] = useState([]);
+  const [dbError, setDbError] = useState(null);
 
   useEffect(() => {
     if (!db || !userId) return;
     const unsubCampaigns = db.collection("users").doc(userId).collection("campaigns")
       .orderBy("createdAt", "desc")
-      .onSnapshot(snap => setCampaigns(snap.docs.map(d => d.data())));
+      .onSnapshot(
+        snap => { setDbError(null); setCampaigns(snap.docs.map(d => d.data())); },
+        err => { console.error("[campaigns] Firestore error:", err); setDbError(err.message); }
+      );
     const unsubTestimonials = db.collection("users").doc(userId).collection("testimonials")
       .orderBy("createdAt", "desc")
-      .onSnapshot(snap => setTestimonials(snap.docs.map(d => d.data())));
+      .onSnapshot(
+        snap => setTestimonials(snap.docs.map(d => d.data())),
+        err => console.error("[testimonials] Firestore error:", err)
+      );
     return () => { unsubCampaigns(); unsubTestimonials(); };
   }, [db, userId]);
   const [showCreate, setShowCreate] = useState(false);
@@ -1630,6 +1637,8 @@ function Dashboard({ onPreview, userId, db }) {
   const [prompts, setPrompts] = useState([]);
   const [generating, setGenerating] = useState(false);
   const [copiedId, setCopiedId] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState(null);
 
   async function handleGenerate() {
     if (!form.companyName || !form.industry) return;
@@ -1644,12 +1653,25 @@ function Dashboard({ onPreview, userId, db }) {
   }
 
   async function saveCampaign() {
-    const id = Date.now().toString();
-    const c = { id, ownerId: userId, ...form, prompts, createdAt: Date.now() };
-    await db.collection("users").doc(userId).collection("campaigns").doc(id).set(c);
-    setForm({ name: "", companyName: "", industry: "", context: "" });
-    setPrompts([]);
-    setShowCreate(false);
+    setSaveError(null);
+    if (!db) { setSaveError("Database not ready — please wait a moment and try again."); return; }
+    if (!userId) { setSaveError("Not signed in."); return; }
+    setSaving(true);
+    try {
+      const id = Date.now().toString();
+      const c = { id, ownerId: userId, ...form, prompts, createdAt: Date.now() };
+      console.log("[saveCampaign] writing to Firestore:", c);
+      await db.collection("users").doc(userId).collection("campaigns").doc(id).set(c);
+      console.log("[saveCampaign] write succeeded");
+      setForm({ name: "", companyName: "", industry: "", context: "" });
+      setPrompts([]);
+      setShowCreate(false);
+    } catch (e) {
+      console.error("[saveCampaign] write failed:", e);
+      setSaveError(e.message || "Failed to save campaign. Check the console for details.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   function copyLink(id) {
@@ -1662,6 +1684,12 @@ function Dashboard({ onPreview, userId, db }) {
       {inviteTarget && <InviteModal campaign={inviteTarget} onClose={() => setInviteTarget(null)} />}
       {playbackTarget && <VideoPlaybackModal testimonial={playbackTarget} onClose={() => setPlaybackTarget(null)} />}
       {editTarget && <VideoEditor testimonial={editTarget} onClose={() => setEditTarget(null)} />}
+      {dbError && (
+        <div style={{ margin: "0 0 20px", color: "#e05c5c", fontSize: "0.85rem", background: "#2a1010", border: "1px solid #5c2020", borderRadius: 8, padding: "12px 16px" }}>
+          <strong>Firestore error:</strong> {dbError}
+          {dbError.includes("index") && <span> — open the Firebase Console link in the browser console to create the required index.</span>}
+        </div>
+      )}
       <div className="dash-header">
         <div className="dash-title serif">Your Dashboard</div>
         <div className="dash-subtitle">Manage campaigns and review incoming testimonials</div>
@@ -1764,10 +1792,12 @@ function Dashboard({ onPreview, userId, db }) {
                     ))}
                   </div>
                   <button className="btn btn-primary" style={{ marginTop: 20 }}
-                    disabled={!form.name} onClick={saveCampaign}>
-                    Save Campaign →
+                    disabled={!form.name || saving || !db} onClick={saveCampaign}>
+                    {saving ? "Saving…" : "Save Campaign →"}
                   </button>
                   {!form.name && <span style={{ color: "var(--muted)", fontSize: "0.82rem", marginLeft: 12 }}>Add a campaign name to save</span>}
+                  {!db && form.name && <span style={{ color: "var(--muted)", fontSize: "0.82rem", marginLeft: 12 }}>Connecting to database…</span>}
+                  {saveError && <div style={{ marginTop: 10, color: "#e05c5c", fontSize: "0.85rem", background: "#2a1010", border: "1px solid #5c2020", borderRadius: 8, padding: "10px 14px" }}>{saveError}</div>}
                 </>
               )}
             </div>
