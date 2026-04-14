@@ -983,7 +983,13 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
 
   return (
     <div className="client-page">
-      <div className="client-logo">✦ Vouch</div>
+      {onBack && (
+        <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 100, background: "rgba(10,10,10,0.92)", backdropFilter: "blur(8px)", borderBottom: "1px solid #222", padding: "10px 20px", display: "flex", alignItems: "center", gap: 16 }}>
+          <button className="btn btn-outline btn-sm" style={{ color: "#aaa", borderColor: "#444" }} onClick={onBack}>← Back to Dashboard</button>
+          <span style={{ fontSize: "0.78rem", color: "#555" }}>Preview mode — this is what your clients see</span>
+        </div>
+      )}
+      <div className="client-logo" style={onBack ? { marginTop: 52 } : {}}>✦ Vouch</div>
 
       <div className="client-card">
         <div className="step-dots">
@@ -1604,9 +1610,18 @@ const PROMPT_TEMPLATES = [
   },
 ];
 
+// ── Plan definitions ──────────────────────────────────────────────────────────
+const PLANS = {
+  starter: { name: "Starter", monthlyLimit: 3,        price: "$497/mo" },
+  growth:  { name: "Growth",  monthlyLimit: 8,        price: "$997/mo" },
+  agency:  { name: "Agency",  monthlyLimit: Infinity,  price: "$1,997/mo" },
+};
+
 // ── Dashboard ──────────────────────────────────────────────────────────────
-function Dashboard({ onPreview, userId, db }) {
+function Dashboard({ onPreview, userId, db, onUpgrade }) {
   const [innerTab, setInnerTab] = useState("campaigns");
+  const planKey = "starter"; // default everyone to Starter for now
+  const plan = PLANS[planKey];
   const [inviteTarget, setInviteTarget] = useState(null);
   const [playbackTarget, setPlaybackTarget] = useState(null);
   const [editTarget, setEditTarget] = useState(null);
@@ -1712,12 +1727,28 @@ function Dashboard({ onPreview, userId, db }) {
       </div>
 
       <div className="tabs-inner">
-        {["campaigns", "testimonials"].map(t => (
-          <button key={t} className={`tab-inner ${innerTab === t ? "active" : ""}`} onClick={() => setInnerTab(t)}>
-            {t === "campaigns" ? "📋 Campaigns" : "⭐ Testimonials"}
+        {[["campaigns","📋 Campaigns"],["testimonials","⭐ Testimonials"],["billing","💳 Plan & Billing"]].map(([key, label]) => (
+          <button key={key} className={`tab-inner ${innerTab === key ? "active" : ""}`} onClick={() => setInnerTab(key)}>
+            {label}
           </button>
         ))}
       </div>
+
+      {/* Limit banner — shown across campaigns + testimonials tabs */}
+      {innerTab !== "billing" && (() => {
+        const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime();
+        const monthlyCount = testimonials.filter(t => t.createdAt >= monthStart).length;
+        const atLimit = plan.monthlyLimit !== Infinity && monthlyCount >= plan.monthlyLimit;
+        return atLimit ? (
+          <div style={{ background: "#2a1a00", border: "1px solid #a06020", borderRadius: 10, padding: "14px 18px", marginBottom: 20, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontWeight: 600, color: "#f0a040", marginBottom: 3 }}>You've reached your {plan.name} plan limit</div>
+              <div style={{ fontSize: "0.85rem", color: "#a06020" }}>{monthlyCount} of {plan.monthlyLimit} testimonials used this month — upgrade to collect more.</div>
+            </div>
+            <button className="btn btn-gold btn-sm" onClick={onUpgrade}>Upgrade Plan →</button>
+          </div>
+        ) : null;
+      })()}
 
       {/* Campaigns tab */}
       {innerTab === "campaigns" && (
@@ -1878,6 +1909,60 @@ function Dashboard({ onPreview, userId, db }) {
           )}
         </>
       )}
+
+      {/* Billing tab */}
+      {innerTab === "billing" && (() => {
+        const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime();
+        const monthlyCount = testimonials.filter(t => t.createdAt >= monthStart).length;
+        const limitDisplay = plan.monthlyLimit === Infinity ? "Unlimited" : plan.monthlyLimit;
+        const pct = plan.monthlyLimit === Infinity ? 0 : Math.min(100, Math.round((monthlyCount / plan.monthlyLimit) * 100));
+        return (
+          <div style={{ maxWidth: 520 }}>
+            <div className="section-title serif" style={{ marginBottom: 20 }}>Plan & Billing</div>
+
+            <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 14, padding: "24px 28px", marginBottom: 20 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
+                <div>
+                  <div style={{ fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)", marginBottom: 6 }}>Current Plan</div>
+                  <div style={{ fontFamily: "Instrument Serif, serif", fontSize: "1.8rem", color: "var(--gold)" }}>{plan.name}</div>
+                  <div style={{ fontSize: "0.85rem", color: "var(--muted)", marginTop: 2 }}>{plan.price}</div>
+                </div>
+                <button className="btn btn-gold" onClick={onUpgrade}>Upgrade Plan →</button>
+              </div>
+
+              <div style={{ marginBottom: 8 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem", marginBottom: 8 }}>
+                  <span style={{ color: "var(--muted)" }}>Testimonials this month</span>
+                  <span style={{ fontWeight: 600 }}>{monthlyCount} / {limitDisplay}</span>
+                </div>
+                {plan.monthlyLimit !== Infinity && (
+                  <div style={{ height: 8, background: "var(--border)", borderRadius: 99, overflow: "hidden" }}>
+                    <div style={{ height: "100%", width: `${pct}%`, background: pct >= 100 ? "#e05c5c" : "var(--gold)", borderRadius: 99, transition: "width 0.4s" }} />
+                  </div>
+                )}
+              </div>
+              {plan.monthlyLimit !== Infinity && monthlyCount >= plan.monthlyLimit && (
+                <div style={{ fontSize: "0.82rem", color: "#e05c5c", marginTop: 10 }}>Limit reached — upgrade to collect more testimonials this month.</div>
+              )}
+            </div>
+
+            <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 14, padding: "20px 28px" }}>
+              <div style={{ fontSize: "0.8rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)", marginBottom: 14 }}>Plan Comparison</div>
+              {Object.values(PLANS).map(p => (
+                <div key={p.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid var(--border)", opacity: p.name === plan.name ? 1 : 0.6 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    {p.name === plan.name && <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--gold)", display: "inline-block" }} />}
+                    {p.name !== plan.name && <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--border)", display: "inline-block" }} />}
+                    <span style={{ fontWeight: p.name === plan.name ? 600 : 400 }}>{p.name}</span>
+                  </div>
+                  <span style={{ fontSize: "0.85rem", color: "var(--muted)" }}>{p.monthlyLimit === Infinity ? "Unlimited" : p.monthlyLimit} / month</span>
+                  <span style={{ fontSize: "0.85rem", color: "var(--muted)" }}>{p.price}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -2240,7 +2325,16 @@ function App() {
     <>
       <style>{style}</style>
       <div className="app">
-        {view === "client" ? (
+        {view === "pricing" ? (
+          <>
+            <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 100, background: "var(--paper)", borderBottom: "1px solid var(--border)", padding: "12px 20px" }}>
+              <button className="btn btn-outline btn-sm" onClick={() => setView("dashboard")}>← Back to Dashboard</button>
+            </div>
+            <div style={{ paddingTop: 56 }}>
+              <InAppPricing onGetStarted={() => setView("dashboard")} />
+            </div>
+          </>
+        ) : view === "client" ? (
           <ClientPage campaign={previewCampaign} onBack={() => { setView("dashboard"); setPreviewCampaign(null); }} storage={storage} userId={activeUser.uid} db={db} />
         ) : (
           <>
@@ -2261,7 +2355,7 @@ function App() {
                 )}
               </div>
             </nav>
-            <Dashboard onPreview={handlePreview} userId={activeUser.uid} db={db} />
+            <Dashboard onPreview={handlePreview} userId={activeUser.uid} db={db} onUpgrade={() => setView("pricing")} />
           </>
         )}
       </div>
