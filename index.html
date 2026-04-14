@@ -481,7 +481,8 @@ const style = `
   .text-response-area textarea::placeholder { color: #444; }
 
   .stars-row { display: flex; gap: 8px; margin-bottom: 24px; justify-content: center; }
-  .star-btn { font-size: 1.8rem; cursor: pointer; transition: transform 0.1s; background: none; border: none; }
+  .star-btn { font-size: 1.8rem; cursor: pointer; transition: transform 0.1s, color 0.1s; background: none; border: none; color: rgba(255,255,255,0.3); }
+  .star-btn.filled { color: #c8a96e; }
   .star-btn:hover { transform: scale(1.2); }
 
   .success-screen { text-align: center; padding: 20px 0; }
@@ -836,7 +837,7 @@ function StarRating({ value, onChange }) {
   return (
     <div className="stars-row">
       {[1,2,3,4,5].map(s => (
-        <button key={s} className="star-btn"
+        <button key={s} className={`star-btn${s <= (hover || value) ? " filled" : ""}`}
           onMouseEnter={() => setHover(s)}
           onMouseLeave={() => setHover(0)}
           onClick={() => onChange(s)}>
