@@ -1309,12 +1309,13 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
       .update({ status: "opened", openedAt: Date.now() }).catch(() => {});
   }, [inviteId, ownerId, db]);
 
-  // Check camera once on mount
+  // Check camera once on mount — only update if not yet determined,
+  // so a later camera-test success can always override this result.
   useEffect(() => {
     if (!navigator.mediaDevices?.getUserMedia) { setCameraAvailable(false); return; }
     navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-      .then(s => { s.getTracks().forEach(t => t.stop()); setCameraAvailable(true); })
-      .catch(() => setCameraAvailable(false));
+      .then(s => { s.getTracks().forEach(t => t.stop()); setCameraAvailable(prev => prev ?? true); })
+      .catch(() => setCameraAvailable(prev => prev ?? false));
   }, []);
 
   // Reset recording state when navigating to a new question
@@ -1349,6 +1350,8 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
     }
     navigator.mediaDevices.getUserMedia({ video: true, audio: true })
       .then(stream => {
+        // Camera confirmed working — override any false from the mount check
+        setCameraAvailable(true);
         camTestStreamRef.current = stream;
         if (camTestVideoRef.current) {
           camTestVideoRef.current.srcObject = stream;
@@ -1599,8 +1602,11 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
             </div>
             <button className="btn btn-gold" style={{ width: "100%", justifyContent: "center" }}
               disabled={!name} onClick={() => {
-                if (cameraAvailable === false) { setStep(1); }
-                else { setCamTestChecks([false, false, false]); setShowCameraTest(true); }
+                // Always show camera test — it runs after user gesture so browser
+                // allows camera access even when the mount-time check failed.
+                // Camera test handles the no-camera fallback itself.
+                setCamTestChecks([false, false, false]);
+                setShowCameraTest(true);
               }}>
               Let's go →
             </button>
