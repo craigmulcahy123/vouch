@@ -604,6 +604,27 @@ const style = `
   .q-or-divider::before { left: 0; }
   .q-or-divider::after  { right: 0; }
 
+  /* Camera test checklist */
+  .cam-checklist { display: flex; flex-direction: column; gap: 10px; }
+  .cam-check-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 14px; border-radius: 10px; cursor: pointer;
+    border: 1.5px solid #2a2a2a; background: #0d0d0d;
+    transition: border-color 0.18s, background 0.18s;
+    user-select: none;
+  }
+  .cam-check-item.checked { border-color: #c8a96e55; background: #1a1508; }
+  .cam-check-item input[type="checkbox"] { display: none; }
+  .cam-check-box {
+    width: 20px; height: 20px; border-radius: 6px; border: 1.5px solid #3a3a3a;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.75rem; color: #c8a96e; font-weight: 700; flex-shrink: 0;
+    background: transparent; transition: border-color 0.18s, background 0.18s;
+  }
+  .cam-check-item.checked .cam-check-box { background: #c8a96e22; border-color: #c8a96e; }
+  .cam-check-label { font-size: 0.88rem; color: #aaa; transition: color 0.18s; }
+  .cam-check-item.checked .cam-check-label { color: #ddd; }
+
   /* AI loading */
   .ai-generating {
     display: flex; align-items: center; gap: 10px; color: var(--gold);
@@ -1193,6 +1214,10 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
   const [step, setStep] = useState(0);
   const qIdx = step - 1; // current question index, valid when step 1..N
 
+  // Camera test screen (between intro and question 1)
+  const [showCameraTest, setShowCameraTest] = useState(false);
+  const [camTestChecks, setCamTestChecks]   = useState([false, false, false]);
+
   // Per-question recording sub-state
   const [recordPhase, setRecordPhase]     = useState("idle"); // "idle"|"recording"|"reviewing"
   const [isRerecording, setIsRerecording] = useState(false);
@@ -1225,6 +1250,8 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
   const mediaRecorderRef = useRef(null);
   const chunksRef        = useRef([]);
   const streamRef        = useRef(null);
+  const camTestVideoRef  = useRef(null);
+  const camTestStreamRef = useRef(null);
 
   // Invite tracking
   const inviteId = new URLSearchParams(window.location.search).get("inviteId");
@@ -1264,6 +1291,36 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
     videoRef.current.srcObject = liveStream;
     videoRef.current.play().catch(() => {});
   }, [liveStream]);
+
+  // Camera test: start/stop live preview stream
+  useEffect(() => {
+    if (!showCameraTest) {
+      if (camTestStreamRef.current) {
+        camTestStreamRef.current.getTracks().forEach(t => t.stop());
+        camTestStreamRef.current = null;
+      }
+      return;
+    }
+    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+      .then(stream => {
+        camTestStreamRef.current = stream;
+        if (camTestVideoRef.current) {
+          camTestVideoRef.current.srcObject = stream;
+          camTestVideoRef.current.play().catch(() => {});
+        }
+      })
+      .catch(() => {
+        setCameraAvailable(false);
+        setShowCameraTest(false);
+        setStep(1);
+      });
+    return () => {
+      if (camTestStreamRef.current) {
+        camTestStreamRef.current.getTracks().forEach(t => t.stop());
+        camTestStreamRef.current = null;
+      }
+    };
+  }, [showCameraTest]);
 
   // Fetch talking points for all questions once on mount
   useEffect(() => {
@@ -1402,7 +1459,7 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
         <div className="step-dots">
           {[0, 1, 2].map(dot => (
             <div key={dot} className={`step-dot ${
-              (dot === 0 && step === 0) ||
+              (dot === 0 && (step === 0 || showCameraTest)) ||
               (dot === 1 && step >= 1 && step <= prompts.length) ||
               (dot === 2 && step === ratingStep)
                 ? "active" : ""
@@ -1429,8 +1486,45 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
                 value={company} onChange={e => setCompany(e.target.value)} placeholder="Acme Corp" />
             </div>
             <button className="btn btn-gold" style={{ width: "100%", justifyContent: "center" }}
-              disabled={!name} onClick={() => setStep(1)}>
+              disabled={!name} onClick={() => {
+                if (cameraAvailable === false) { setStep(1); }
+                else { setCamTestChecks([false, false, false]); setShowCameraTest(true); }
+              }}>
               Let's go →
+            </button>
+          </>
+        )}
+
+        {/* ── Camera test screen ── */}
+        {showCameraTest && (
+          <>
+            <div className="client-step">Camera check</div>
+            <div className="client-title" style={{ marginBottom: 6 }}>Test your camera</div>
+            <div className="client-sub" style={{ marginBottom: 20 }}>
+              Make sure you're well lit and can hear yourself clearly.
+            </div>
+
+            {/* Live preview */}
+            <div className="video-area" style={{ marginBottom: 20 }}>
+              <video ref={camTestVideoRef} playsInline muted
+                style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 14 }} />
+            </div>
+
+            {/* Checklist */}
+            <div className="cam-checklist">
+              {["I can see myself clearly", "I'm in a quiet place", "I'm ready to start"].map((label, i) => (
+                <label key={i} className={`cam-check-item ${camTestChecks[i] ? "checked" : ""}`}>
+                  <input type="checkbox" checked={camTestChecks[i]}
+                    onChange={e => setCamTestChecks(prev => prev.map((v, j) => j === i ? e.target.checked : v))} />
+                  <span className="cam-check-box">{camTestChecks[i] ? "✓" : ""}</span>
+                  <span className="cam-check-label">{label}</span>
+                </label>
+              ))}
+            </div>
+
+            <button className="btn btn-gold" style={{ width: "100%", justifyContent: "center", marginTop: 24 }}
+              onClick={() => { setShowCameraTest(false); setStep(1); }}>
+              Start recording →
             </button>
           </>
         )}
