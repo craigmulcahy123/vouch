@@ -604,6 +604,44 @@ const style = `
   .q-or-divider::before { left: 0; }
   .q-or-divider::after  { right: 0; }
 
+  /* Time estimate badge */
+  .time-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 99px;
+    padding: 4px 12px; font-size: 0.75rem; color: #888;
+    margin-bottom: 20px;
+  }
+
+  /* Recording timer */
+  .rec-timer {
+    font-variant-numeric: tabular-nums; font-size: 0.95rem;
+    font-weight: 700; color: #fff; letter-spacing: 0.03em;
+  }
+  .rec-timer.warn { color: #e09b5c; }
+  .rec-aim { color: #555; font-size: 0.75rem; text-align: center; margin-top: 6px; }
+
+  /* Resume banner */
+  .resume-banner {
+    background: #0f1a0f; border: 1px solid #2a4a2a; border-radius: 12px;
+    padding: 14px 16px; margin-bottom: 20px; display: flex;
+    align-items: center; justify-content: space-between; gap: 12px;
+  }
+  .resume-banner-text { font-size: 0.85rem; color: #8fcf8f; line-height: 1.4; }
+  .resume-banner-text strong { display: block; color: #a8e0a8; margin-bottom: 2px; }
+  .resume-banner-actions { display: flex; gap: 8px; flex-shrink: 0; }
+
+  /* What happens next */
+  .whats-next { margin-top: 24px; padding-top: 20px; border-top: 1px solid #1e1e1e; }
+  .whats-next-title { font-size: 0.75rem; font-weight: 700; color: #666; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 14px; }
+  .whats-next-steps { display: flex; flex-direction: column; gap: 10px; }
+  .whats-next-step { display: flex; align-items: flex-start; gap: 12px; }
+  .whats-next-num {
+    width: 22px; height: 22px; border-radius: 50%; background: #1e1e1e;
+    border: 1px solid #2a2a2a; display: flex; align-items: center; justify-content: center;
+    font-size: 0.7rem; font-weight: 700; color: #c8a96e; flex-shrink: 0; margin-top: 1px;
+  }
+  .whats-next-text { font-size: 0.84rem; color: #777; line-height: 1.45; }
+
   /* Camera test checklist */
   .cam-checklist { display: flex; flex-direction: column; gap: 10px; }
   .cam-check-item {
@@ -1214,6 +1252,13 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
   const [step, setStep] = useState(0);
   const qIdx = step - 1; // current question index, valid when step 1..N
 
+  // localStorage key for progress saving
+  const lsKey = campaign?.id ? `vouch_${campaign.id}` : null;
+
+  // Resume banner (shown when saved progress is detected)
+  const [showResumeBanner, setShowResumeBanner] = useState(false);
+  const [savedProgress, setSavedProgress]       = useState(null);
+
   // Camera test screen (between intro and question 1)
   const [showCameraTest, setShowCameraTest] = useState(false);
   const [camTestChecks, setCamTestChecks]   = useState([false, false, false]);
@@ -1222,6 +1267,7 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
   const [recordPhase, setRecordPhase]     = useState("idle"); // "idle"|"recording"|"reviewing"
   const [isRerecording, setIsRerecording] = useState(false);
   const [countdown, setCountdown]         = useState(null);   // null | 3 | 2 | 1 | 0
+  const [recSecs, setRecSecs]             = useState(0);      // live recording timer
 
   // AI-generated talking points per question, fetched on mount
   const [talkingPoints, setTalkingPoints] = useState({});     // { [qIdx]: string[] | null }
@@ -1356,6 +1402,34 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
     return () => clearTimeout(t);
   }, [countdown]);
 
+  // Recording timer: tick up every second while recording
+  useEffect(() => {
+    if (recordPhase !== "recording") return;
+    setRecSecs(0);
+    const t = setInterval(() => setRecSecs(s => s + 1), 1000);
+    return () => clearInterval(t);
+  }, [recordPhase]);
+
+  // Load saved progress from localStorage on mount
+  useEffect(() => {
+    if (!lsKey) return;
+    try {
+      const saved = JSON.parse(localStorage.getItem(lsKey) || "null");
+      if (saved && saved.step >= 1 && saved.name) {
+        setSavedProgress(saved);
+        setShowResumeBanner(true);
+      }
+    } catch {}
+  }, []);
+
+  // Auto-save progress to localStorage whenever step/answers/name change
+  useEffect(() => {
+    if (!lsKey || step === 0) return;
+    try {
+      localStorage.setItem(lsKey, JSON.stringify({ name, company, step, answers }));
+    } catch {}
+  }, [step, name, company, answers]);
+
   async function startRecording() {
     const capturedIdx = qIdx;
     try {
@@ -1439,9 +1513,14 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
         .update({ status: "recorded", recordedAt: Date.now() }).catch(() => {});
     }
 
+    if (lsKey) try { localStorage.removeItem(lsKey); } catch {}
     setSubmitting(false);
     setSubmitPhase("");
     setStep(doneStep);
+  }
+
+  function fmtSecs(s) {
+    return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
   }
 
   return (
@@ -1467,9 +1546,33 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
           ))}
         </div>
 
+        {/* ── Resume banner ── */}
+        {showResumeBanner && step === 0 && (
+          <div className="resume-banner">
+            <div className="resume-banner-text">
+              <strong>Welcome back!</strong>Continue where you left off?
+            </div>
+            <div className="resume-banner-actions">
+              <button className="btn btn-sm btn-outline" style={{ color: "#8fcf8f", borderColor: "#2a4a2a", fontSize: "0.78rem" }}
+                onClick={() => {
+                  setName(savedProgress.name || "");
+                  setCompany(savedProgress.company || "");
+                  setAnswers(savedProgress.answers || {});
+                  setStep(savedProgress.step || 1);
+                  setShowResumeBanner(false);
+                }}>Resume</button>
+              <button className="btn btn-sm btn-outline" style={{ color: "#555", borderColor: "#222", fontSize: "0.78rem" }}
+                onClick={() => { setShowResumeBanner(false); if (lsKey) try { localStorage.removeItem(lsKey); } catch {} }}>
+                Start over
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* ── Step 0: About You ── */}
         {step === 0 && (
           <>
+            <div className="time-badge">⏱ Takes about 5 minutes</div>
             <div className="client-step">Step 1 of 3 — About You</div>
             <div className="client-title">Share your experience</div>
             <div className="client-sub">
@@ -1636,16 +1739,20 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
 
             {/* Record button */}
             {cameraAvailable !== false && recordPhase === "idle" && countdown === null && (
-              <div className="rec-ring-wrap" style={{ marginBottom: 16 }}>
+              <div className="rec-ring-wrap" style={{ marginBottom: 4 }}>
                 <button className="rec-btn-big" onClick={() => setCountdown(3)} aria-label="Start recording">⏺</button>
                 <span className="rec-btn-big-label">Tap to record</span>
               </div>
+            )}
+            {cameraAvailable !== false && recordPhase === "idle" && countdown === null && (
+              <div className="rec-aim">Aim for 30–60 seconds per answer</div>
             )}
 
             {/* Live recording controls */}
             {recordPhase === "recording" && (
               <div className="rec-live-row" style={{ marginBottom: 16 }}>
                 <div className="rec-indicator"><div className="rec-dot" /> Recording…</div>
+                <span className={`rec-timer${recSecs >= 90 ? " warn" : ""}`}>{fmtSecs(recSecs)}</span>
                 <button className="rec-btn rec-btn-stop" onClick={stopRecording}>⏹ Stop</button>
               </div>
             )}
@@ -1736,8 +1843,24 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
                 <div style={{ fontFamily: "Instrument Serif, serif", fontSize: "1.05rem", fontStyle: "italic", color: "#ddd", lineHeight: 1.6 }}>"{generatedQuote}"</div>
               </div>
             )}
+            <div className="whats-next">
+              <div className="whats-next-title">What happens now?</div>
+              <div className="whats-next-steps">
+                {[
+                  "We review your testimonial",
+                  "We produce a polished video",
+                  `${campaign?.companyName || "They"} will share it — and you might be famous! 😄`,
+                ].map((text, i) => (
+                  <div key={i} className="whats-next-step">
+                    <div className="whats-next-num">{i + 1}</div>
+                    <div className="whats-next-text">{text}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             {onBack && (
-              <button className="btn btn-outline" style={{ color: "#888", borderColor: "#333" }} onClick={onBack}>← Back to app</button>
+              <button className="btn btn-outline" style={{ color: "#888", borderColor: "#333", marginTop: 20 }} onClick={onBack}>← Back to app</button>
             )}
           </div>
         )}
