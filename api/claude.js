@@ -107,6 +107,21 @@ Use relevant emojis. No markdown, no explanation.`,
     };
   }
 
+  if (action === "talkingPoints") {
+    const { question } = params;
+    return {
+      maxTokens: 200,
+      content: `A customer is about to record a video testimonial and has been asked this question:
+
+"${question}"
+
+Give them exactly 3 short, friendly talking point prompts to help them know what to say. Each should be under 12 words — think specific examples, concrete outcomes, or emotions. Make them feel easy and conversational, not corporate.
+
+Respond ONLY with a JSON array of 3 strings. No markdown, no explanation. Example:
+["A specific example or story","How it changed things day to day","What you'd tell a friend"]`,
+    };
+  }
+
   return null;
 }
 
@@ -124,6 +139,10 @@ function getFallback(action, params) {
       { title: "Real Results", desc: "Clip where they share a specific outcome or win.", emoji: "📈" },
       { title: "Would They Recommend Us?", desc: "Their direct recommendation to others.", emoji: "⭐" },
     ]);
+  }
+
+  if (action === "talkingPoints") {
+    return JSON.stringify(["A specific example or story", "How things changed day to day", "What you'd tell a friend"]);
   }
 
   return null;

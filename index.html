@@ -560,6 +560,38 @@ const style = `
   }
   .q-review-actions .btn { flex: 1; justify-content: center; font-size: 0.88rem; }
 
+  /* Countdown overlay */
+  .q-countdown-overlay {
+    position: absolute; inset: 0; border-radius: 14px;
+    background: rgba(0,0,0,0.72); display: flex; flex-direction: column;
+    align-items: center; justify-content: center; z-index: 10;
+  }
+  .q-countdown-num {
+    font-family: 'Instrument Serif', serif; font-size: 7rem; color: #fff;
+    line-height: 1; animation: countPop 0.35s cubic-bezier(0.34,1.56,0.64,1);
+  }
+  .q-countdown-label { color: rgba(255,255,255,0.55); font-size: 0.82rem; margin-top: 8px; letter-spacing: 0.08em; }
+  @keyframes countPop {
+    0%   { transform: scale(0.4); opacity: 0; }
+    100% { transform: scale(1);   opacity: 1; }
+  }
+
+  /* Talking point hints */
+  .q-hints { margin: 0 0 20px; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 5px; }
+  .q-hint {
+    display: flex; align-items: flex-start; gap: 8px;
+    color: #666; font-size: 0.82rem; line-height: 1.45;
+  }
+  .q-hint-bullet { color: var(--gold); flex-shrink: 0; margin-top: 1px; }
+  .q-hints-skeleton {
+    display: flex; flex-direction: column; gap: 6px; margin-bottom: 20px;
+  }
+  .q-hints-skeleton-line {
+    height: 10px; background: #1e1e1e; border-radius: 99px;
+    animation: shimmer 1.4s ease-in-out infinite alternate;
+  }
+  @keyframes shimmer { from { opacity: 0.4; } to { opacity: 0.9; } }
+
   /* Text fallback divider */
   .q-or-divider {
     text-align: center; color: #3a3a3a; font-size: 0.78rem;
@@ -1164,6 +1196,10 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
   // Per-question recording sub-state
   const [recordPhase, setRecordPhase]     = useState("idle"); // "idle"|"recording"|"reviewing"
   const [isRerecording, setIsRerecording] = useState(false);
+  const [countdown, setCountdown]         = useState(null);   // null | 3 | 2 | 1 | 0
+
+  // AI-generated talking points per question, fetched on mount
+  const [talkingPoints, setTalkingPoints] = useState({});     // { [qIdx]: string[] | null }
 
   // Form
   const [answers, setAnswers]   = useState({});
@@ -1213,6 +1249,7 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
     if (step >= 1 && step <= prompts.length) {
       setRecordPhase("idle");
       setIsRerecording(false);
+      setCountdown(null);
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(t => t.stop());
         streamRef.current = null;
@@ -1227,6 +1264,40 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
     videoRef.current.srcObject = liveStream;
     videoRef.current.play().catch(() => {});
   }, [liveStream]);
+
+  // Fetch talking points for all questions once on mount
+  useEffect(() => {
+    if (!prompts.length) return;
+    prompts.forEach((question, i) => {
+      fetch("/api/claude", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "talkingPoints", question }),
+      })
+        .then(r => r.json())
+        .then(data => {
+          try {
+            const points = JSON.parse(data.text);
+            setTalkingPoints(prev => ({ ...prev, [i]: Array.isArray(points) ? points : null }));
+          } catch {
+            setTalkingPoints(prev => ({ ...prev, [i]: null }));
+          }
+        })
+        .catch(() => setTalkingPoints(prev => ({ ...prev, [i]: null })));
+    });
+  }, []);
+
+  // Countdown: tick down each second, then start recording
+  useEffect(() => {
+    if (countdown === null) return;
+    if (countdown === 0) {
+      setCountdown(null);
+      startRecording();
+      return;
+    }
+    const t = setTimeout(() => setCountdown(c => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [countdown]);
 
   async function startRecording() {
     const capturedIdx = qIdx;
@@ -1381,6 +1452,25 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
             {/* Question text */}
             <div className="q-text">{prompts[qIdx]}</div>
 
+            {/* Talking point hints */}
+            {recordPhase !== "recording" && countdown === null && (
+              talkingPoints[qIdx] ? (
+                <ul className="q-hints">
+                  {talkingPoints[qIdx].map((pt, i) => (
+                    <li key={i} className="q-hint">
+                      <span className="q-hint-bullet">•</span>{pt}
+                    </li>
+                  ))}
+                </ul>
+              ) : talkingPoints[qIdx] === undefined ? (
+                <div className="q-hints-skeleton">
+                  {[70, 55, 80].map((w, i) => (
+                    <div key={i} className="q-hints-skeleton-line" style={{ width: `${w}%` }} />
+                  ))}
+                </div>
+              ) : null
+            )}
+
             {/* Contextual micro-copy */}
             {recordPhase === "idle" && (
               <div className={`q-micro ${isRerecording ? "retry" : ""}`}>
@@ -1400,9 +1490,9 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
 
             {/* Video area */}
             {cameraAvailable !== false && (
-              <div className="video-area" style={{ marginBottom: 16 }}>
-                {/* Idle placeholder — only when no recording yet */}
-                {recordPhase === "idle" && !videoURLs[qIdx] && (
+              <div className="video-area" style={{ marginBottom: 16, position: "relative" }}>
+                {/* Idle placeholder — only when no recording yet and not counting down */}
+                {recordPhase === "idle" && !videoURLs[qIdx] && countdown === null && (
                   <div className="video-placeholder">
                     <div className="video-icon">🎥</div>
                     <div className="video-hint">
@@ -1425,6 +1515,14 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
                   />
                 )}
 
+                {/* 3-2-1 countdown overlay */}
+                {countdown !== null && (
+                  <div className="q-countdown-overlay">
+                    <div key={countdown} className="q-countdown-num">{countdown || "Go!"}</div>
+                    <div className="q-countdown-label">Get ready…</div>
+                  </div>
+                )}
+
                 {/* Question text overlay during live recording */}
                 {recordPhase === "recording" && (
                   <div className="q-video-overlay">
@@ -1443,9 +1541,9 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
             )}
 
             {/* Record button */}
-            {cameraAvailable !== false && recordPhase === "idle" && (
+            {cameraAvailable !== false && recordPhase === "idle" && countdown === null && (
               <div className="rec-ring-wrap" style={{ marginBottom: 16 }}>
-                <button className="rec-btn-big" onClick={startRecording} aria-label="Start recording">⏺</button>
+                <button className="rec-btn-big" onClick={() => setCountdown(3)} aria-label="Start recording">⏺</button>
                 <span className="rec-btn-big-label">Tap to record</span>
               </div>
             )}
