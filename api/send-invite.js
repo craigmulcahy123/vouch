@@ -3,12 +3,12 @@ module.exports = async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const { toEmail, clientName, campaign } = req.body;
+  const { toEmail, clientName, campaign, inviteId } = req.body;
   if (!toEmail || !clientName || !campaign) {
     return res.status(400).json({ error: "Missing required fields" });
   }
 
-  const recordingLink = `${req.headers.origin}/record/${campaign.id}`;
+  const recordingLink = `${req.headers.origin}/record/${campaign.id}${inviteId ? `?inviteId=${inviteId}` : ""}`;
   const html = buildEmailHTML({ clientName, companyName: campaign.companyName, campaignName: campaign.name, prompts: campaign.prompts, recordingLink });
 
   const response = await fetch("https://api.resend.com/emails", {

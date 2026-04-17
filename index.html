@@ -636,6 +636,82 @@ const style = `
     .dash-title { font-size: 2rem; }
   }
 
+  /* ── Kanban / Invites pipeline ── */
+  .kanban-board {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(200px, 1fr));
+    gap: 12px; align-items: start; overflow-x: auto;
+    padding-bottom: 8px;
+  }
+  .kanban-col {
+    background: var(--cream); border-radius: 14px; padding: 14px;
+    min-width: 190px;
+  }
+  .kanban-col-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .kanban-col-label {
+    font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.1em; color: var(--muted);
+  }
+  .kanban-col-count {
+    font-size: 0.72rem; font-weight: 600; padding: 2px 8px;
+    border-radius: 20px; background: var(--border); color: var(--muted);
+  }
+  .kanban-card {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px; margin-bottom: 10px;
+    border-left-width: 3px; position: relative;
+  }
+  .kanban-card:last-child { margin-bottom: 0; }
+  .kanban-card.invited  { border-left-color: #aaa; }
+  .kanban-card.opened   { border-left-color: #5c9be0; }
+  .kanban-card.recorded { border-left-color: var(--gold); }
+  .kanban-card.approved { border-left-color: #5cb87a; }
+  .kanban-card.delivered { border-left-color: var(--ink); background: var(--ink); border-color: var(--ink); }
+  .kanban-card.delivered .kc-name,
+  .kanban-card.delivered .kc-campaign,
+  .kanban-card.delivered .kc-days { color: #aaa; }
+  .kanban-card.delivered .kc-company { color: #666; }
+  .kc-name { font-weight: 600; font-size: 0.9rem; margin-bottom: 2px; }
+  .kc-company { font-size: 0.78rem; color: var(--muted); }
+  .kc-campaign {
+    font-size: 0.75rem; color: var(--muted); margin-top: 8px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .kc-days { font-size: 0.72rem; color: var(--muted); margin-top: 4px; }
+  .kc-actions { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+  .kc-badge-done {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 0.72rem; font-weight: 700; color: #fff;
+    background: #2a2a2a; padding: 3px 10px; border-radius: 20px;
+  }
+  .pipeline-stats {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 12px; margin-bottom: 24px;
+  }
+  .pipeline-stat {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px 20px;
+  }
+  .pipeline-stat-num {
+    font-family: 'Instrument Serif', serif; font-size: 2rem; line-height: 1;
+    margin-bottom: 4px;
+  }
+  .pipeline-stat-label {
+    font-size: 0.75rem; font-weight: 600; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .pipeline-empty {
+    text-align: center; padding: 60px 20px; color: var(--muted);
+    grid-column: 1 / -1;
+  }
+  @media (max-width: 900px) {
+    .pipeline-stats { grid-template-columns: repeat(2, 1fr); }
+    .kanban-board { grid-template-columns: repeat(5, 200px); }
+  }
+
   /* ── Scroll reveal ── */
   [data-reveal] {
     opacity: 0;
@@ -852,11 +928,11 @@ function buildEmailHTML({ clientName, companyName, campaignName, prompts, record
 }
 
 // ── Send invite via Resend ────────────────────────────────────────────────────
-async function sendInviteEmail({ toEmail, clientName, campaign }) {
+async function sendInviteEmail({ toEmail, clientName, campaign, inviteId }) {
   const res = await fetch("/api/send-invite", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ toEmail, clientName, campaign }),
+    body: JSON.stringify({ toEmail, clientName, campaign, inviteId }),
   });
   if (!res.ok) {
     const err = await res.json();
@@ -866,20 +942,40 @@ async function sendInviteEmail({ toEmail, clientName, campaign }) {
 }
 
 // ── Invite Modal ──────────────────────────────────────────────────────────────
-function InviteModal({ campaign, onClose }) {
+function InviteModal({ campaign, db, userId, onClose }) {
   const [clientName, setClientName] = useState("");
   const [toEmail, setToEmail] = useState("");
   const [status, setStatus] = useState(null); // null | "sending" | "success" | "error"
   const [errorMsg, setErrorMsg] = useState("");
   const [showPreview, setShowPreview] = useState(false);
 
-  const recordingLink = `https://vouch.app/record/${campaign.id}`;
+  const recordingLink = `${window.location.origin}/record/${campaign.id}`;
 
   async function handleSend() {
     if (!clientName || !toEmail) return;
     setStatus("sending");
+    const inviteId = Date.now().toString();
     try {
-      await sendInviteEmail({ toEmail, clientName, campaign });
+      await sendInviteEmail({ toEmail, clientName, campaign, inviteId });
+      // Save invite record to Firestore
+      if (db && userId) {
+        await db.collection("users").doc(userId).collection("invites").doc(inviteId).set({
+          id: inviteId,
+          clientName,
+          toEmail,
+          campaignId: campaign.id,
+          campaignName: campaign.name || "",
+          companyName: campaign.companyName || "",
+          ownerId: userId,
+          status: "invited",
+          invitedAt: Date.now(),
+          openedAt: null,
+          recordedAt: null,
+          approvedAt: null,
+          deliveredAt: null,
+          planValue: 497,
+        });
+      }
       setStatus("success");
     } catch (e) {
       setErrorMsg(e.message);
@@ -982,6 +1078,17 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
   const [step, setStep] = useState(0);
   const [selectedPrompt, setSelectedPrompt] = useState(0);
   const [answers, setAnswers] = useState({});
+
+  // Invite tracking — read inviteId from URL and update status automatically
+  const inviteId = new URLSearchParams(window.location.search).get("inviteId");
+  const ownerId = campaign?.ownerId;
+
+  useEffect(() => {
+    if (!inviteId || !ownerId || !db) return;
+    db.collection("users").doc(ownerId).collection("invites").doc(inviteId)
+      .update({ status: "opened", openedAt: Date.now() })
+      .catch(() => {}); // silently ignore if invite not found
+  }, [inviteId, ownerId, db]);
   const [rating, setRating] = useState(0);
   const [name, setName] = useState("");
   const [company, setCompany] = useState("");
@@ -1103,6 +1210,13 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
       } catch (e) {
         console.error("Failed to save testimonial:", e);
       }
+    }
+
+    // Mark invite as recorded
+    if (inviteId && ownerId && db) {
+      db.collection("users").doc(ownerId).collection("invites").doc(inviteId)
+        .update({ status: "recorded", recordedAt: Date.now() })
+        .catch(() => {});
     }
 
     setSubmitting(false);
@@ -1746,6 +1860,148 @@ const PLANS = {
   agency:  { name: "Agency",  monthlyLimit: Infinity,  price: "$1,997/mo" },
 };
 
+// ── Invites Kanban ────────────────────────────────────────────────────────────
+const PIPELINE_STAGES = [
+  { key: "invited",   label: "Invited",   color: "#aaa" },
+  { key: "opened",    label: "Opened",    color: "#5c9be0" },
+  { key: "recorded",  label: "Recorded",  color: "#c8a96e" },
+  { key: "approved",  label: "Approved",  color: "#5cb87a" },
+  { key: "delivered", label: "Delivered", color: "#0e0e0e" },
+];
+
+function daysSince(ts) {
+  return Math.floor((Date.now() - ts) / 86400000);
+}
+
+function InvitesKanban({ invites, db, userId, onReview }) {
+  async function updateStatus(invite, newStatus) {
+    if (!db || !userId) return;
+    const now = Date.now();
+    const patch = { status: newStatus };
+    if (newStatus === "approved")  patch.approvedAt = now;
+    if (newStatus === "delivered") patch.deliveredAt = now;
+    await db.collection("users").doc(userId).collection("invites").doc(invite.id).update(patch);
+  }
+
+  async function handleResend(invite) {
+    try {
+      await sendInviteEmail({
+        toEmail: invite.toEmail,
+        clientName: invite.clientName,
+        campaign: { id: invite.campaignId, name: invite.campaignName, companyName: invite.companyName, prompts: [] },
+        inviteId: invite.id,
+      });
+      alert(`Re-sent to ${invite.toEmail}`);
+    } catch (e) {
+      alert("Resend failed: " + e.message);
+    }
+  }
+
+  // ── Stats ──
+  const total = invites.length;
+  const delivered = invites.filter(i => i.status === "delivered");
+  const completionRate = total > 0 ? Math.round((delivered.length / total) * 100) : 0;
+  const avgDays = delivered.length > 0
+    ? Math.round(delivered.reduce((sum, i) => sum + ((i.deliveredAt || Date.now()) - i.invitedAt), 0) / delivered.length / 86400000)
+    : null;
+  const atRisk = invites.filter(i => i.status === "invited" || i.status === "opened")
+    .reduce((sum, i) => sum + (i.planValue || 497), 0);
+  const inPipeline = invites.filter(i => i.status !== "delivered").length;
+
+  return (
+    <div>
+      {/* Summary stats */}
+      <div className="pipeline-stats">
+        <div className="pipeline-stat">
+          <div className="pipeline-stat-num serif">{inPipeline}</div>
+          <div className="pipeline-stat-label">In Pipeline</div>
+        </div>
+        <div className="pipeline-stat">
+          <div className="pipeline-stat-num serif">{avgDays !== null ? `${avgDays}d` : "—"}</div>
+          <div className="pipeline-stat-label">Avg Completion</div>
+        </div>
+        <div className="pipeline-stat">
+          <div className="pipeline-stat-num serif">{completionRate}%</div>
+          <div className="pipeline-stat-label">Completion Rate</div>
+        </div>
+        <div className="pipeline-stat">
+          <div className="pipeline-stat-num serif" style={{ color: atRisk > 0 ? "#e05c5c" : "var(--ink)" }}>
+            £{atRisk.toLocaleString()}
+          </div>
+          <div className="pipeline-stat-label">Revenue at Risk</div>
+        </div>
+      </div>
+
+      {/* Kanban board */}
+      {total === 0 ? (
+        <div style={{ textAlign: "center", padding: "60px 20px", color: "var(--muted)", background: "var(--cream)", borderRadius: 14 }}>
+          <div style={{ fontSize: "2rem", marginBottom: 12 }}>📬</div>
+          <div style={{ fontFamily: "Instrument Serif, serif", fontSize: "1.3rem", marginBottom: 8 }}>No invites yet</div>
+          <div style={{ fontSize: "0.88rem" }}>Send your first invite from the Campaigns tab to start tracking your pipeline.</div>
+        </div>
+      ) : (
+        <div className="kanban-board">
+          {PIPELINE_STAGES.map(stage => {
+            const cards = invites.filter(i => i.status === stage.key);
+            return (
+              <div key={stage.key} className="kanban-col">
+                <div className="kanban-col-header">
+                  <div className="kanban-col-label" style={{ color: stage.color }}>{stage.label}</div>
+                  <div className="kanban-col-count">{cards.length}</div>
+                </div>
+                {cards.length === 0 && (
+                  <div style={{ fontSize: "0.78rem", color: "var(--border)", textAlign: "center", padding: "20px 0" }}>—</div>
+                )}
+                {cards.map(invite => {
+                  const days = daysSince(invite.invitedAt);
+                  const stale = stage.key === "invited" && days >= 3;
+                  return (
+                    <div key={invite.id} className={`kanban-card ${stage.key}`}>
+                      <div className="kc-name">{invite.clientName}</div>
+                      {invite.companyName && <div className="kc-company">{invite.companyName}</div>}
+                      <div className="kc-campaign">{invite.campaignName}</div>
+                      <div className="kc-days">{days === 0 ? "Today" : `${days}d ago`}</div>
+                      <div className="kc-actions">
+                        {stage.key === "delivered" && (
+                          <span className="kc-badge-done">✓ Done</span>
+                        )}
+                        {stage.key === "invited" && stale && (
+                          <button className="btn btn-outline btn-sm" style={{ fontSize: "0.75rem", padding: "4px 10px" }}
+                            onClick={() => handleResend(invite)}>
+                            ↩ Resend
+                          </button>
+                        )}
+                        {stage.key === "recorded" && (
+                          <button className="btn btn-gold btn-sm" style={{ fontSize: "0.75rem", padding: "4px 10px" }}
+                            onClick={() => onReview(invite)}>
+                            Review
+                          </button>
+                        )}
+                        {(stage.key === "recorded" || stage.key === "opened") && (
+                          <button className="btn btn-outline btn-sm" style={{ fontSize: "0.75rem", padding: "4px 10px" }}
+                            onClick={() => updateStatus(invite, "approved")}>
+                            Approve
+                          </button>
+                        )}
+                        {stage.key === "approved" && (
+                          <button className="btn btn-primary btn-sm" style={{ fontSize: "0.75rem", padding: "4px 10px" }}
+                            onClick={() => updateStatus(invite, "delivered")}>
+                            Mark Delivered
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Dashboard ──────────────────────────────────────────────────────────────
 function Dashboard({ onPreview, userId, db, onUpgrade }) {
   const [innerTab, setInnerTab] = useState("campaigns");
@@ -1757,6 +2013,7 @@ function Dashboard({ onPreview, userId, db, onUpgrade }) {
 
   const [campaigns, setCampaigns] = useState([]);
   const [testimonials, setTestimonials] = useState([]);
+  const [invites, setInvites] = useState([]);
   const [dbError, setDbError] = useState(null);
 
   useEffect(() => {
@@ -1773,7 +2030,13 @@ function Dashboard({ onPreview, userId, db, onUpgrade }) {
         snap => setTestimonials(snap.docs.map(d => d.data())),
         err => console.error("[testimonials] Firestore error:", err)
       );
-    return () => { unsubCampaigns(); unsubTestimonials(); };
+    const unsubInvites = db.collection("users").doc(userId).collection("invites")
+      .orderBy("invitedAt", "desc")
+      .onSnapshot(
+        snap => setInvites(snap.docs.map(d => d.data())),
+        err => console.error("[invites] Firestore error:", err)
+      );
+    return () => { unsubCampaigns(); unsubTestimonials(); unsubInvites(); };
   }, [db, userId]);
   const [showCreate, setShowCreate] = useState(false);
 
@@ -1826,7 +2089,7 @@ function Dashboard({ onPreview, userId, db, onUpgrade }) {
 
   return (
     <div className="dashboard">
-      {inviteTarget && <InviteModal campaign={inviteTarget} onClose={() => setInviteTarget(null)} />}
+      {inviteTarget && <InviteModal campaign={inviteTarget} db={db} userId={userId} onClose={() => setInviteTarget(null)} />}
       {playbackTarget && <VideoPlaybackModal testimonial={playbackTarget} onClose={() => setPlaybackTarget(null)} />}
       {editTarget && <VideoEditor testimonial={editTarget} onClose={() => setEditTarget(null)} />}
       {dbError && (
@@ -1856,9 +2119,14 @@ function Dashboard({ onPreview, userId, db, onUpgrade }) {
       </div>
 
       <div className="tabs-inner">
-        {[["campaigns","📋 Campaigns"],["testimonials","⭐ Testimonials"],["billing","💳 Plan & Billing"]].map(([key, label]) => (
+        {[["campaigns","📋 Campaigns"],["testimonials","⭐ Testimonials"],["invites","📬 Invites"],["billing","💳 Plan & Billing"]].map(([key, label]) => (
           <button key={key} className={`tab-inner ${innerTab === key ? "active" : ""}`} onClick={() => setInnerTab(key)}>
             {label}
+            {key === "invites" && invites.filter(i => i.status === "recorded").length > 0 && (
+              <span style={{ marginLeft: 6, background: "var(--gold)", color: "#fff", borderRadius: 20, fontSize: "0.65rem", fontWeight: 700, padding: "1px 6px" }}>
+                {invites.filter(i => i.status === "recorded").length}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -2036,6 +2304,28 @@ function Dashboard({ onPreview, userId, db, onUpgrade }) {
               ))}
             </div>
           )}
+        </>
+      )}
+
+      {/* Invites tab */}
+      {innerTab === "invites" && (
+        <>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+            <div>
+              <div className="section-title serif" style={{ margin: 0 }}>Invite Pipeline</div>
+              <div style={{ color: "var(--muted)", fontSize: "0.88rem", marginTop: 4 }}>Track every client from invite to delivered clip</div>
+            </div>
+          </div>
+          <InvitesKanban
+            invites={invites}
+            db={db}
+            userId={userId}
+            onReview={invite => {
+              const t = testimonials.find(t => t.campaignId === invite.campaignId);
+              if (t) setPlaybackTarget(t);
+              else setInnerTab("testimonials");
+            }}
+          />
         </>
       )}
 
