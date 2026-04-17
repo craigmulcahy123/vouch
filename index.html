@@ -635,6 +635,135 @@ const style = `
     .stats-row { grid-template-columns: 1fr; }
     .dash-title { font-size: 2rem; }
   }
+
+  /* ── Scroll reveal ── */
+  [data-reveal] {
+    opacity: 0;
+    transform: translateY(36px);
+    transition: opacity 0.65s cubic-bezier(0.16,1,0.3,1), transform 0.65s cubic-bezier(0.16,1,0.3,1);
+  }
+  [data-reveal].revealed { opacity: 1; transform: translateY(0); }
+  [data-reveal].d1 { transition-delay: 0.1s; }
+  [data-reveal].d2 { transition-delay: 0.2s; }
+  [data-reveal].d3 { transition-delay: 0.3s; }
+
+  /* ── How It Works ── */
+  .hiw-section {
+    max-width: 880px; margin: 0 auto; padding: 80px 24px 60px;
+  }
+  .hiw-label {
+    display: inline-block; padding: 5px 16px; border-radius: 20px;
+    border: 1px solid var(--border); background: var(--cream);
+    font-size: 0.75rem; color: var(--muted); font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 20px;
+  }
+  .hiw-heading {
+    font-family: 'Instrument Serif', serif;
+    font-size: clamp(2rem, 5vw, 3.2rem);
+    line-height: 1.1; letter-spacing: -0.02em; margin-bottom: 64px;
+  }
+  .hiw-step {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 48px; align-items: center; margin-bottom: 72px;
+  }
+  .hiw-step:last-child { margin-bottom: 0; }
+  .hiw-step.reverse { direction: rtl; }
+  .hiw-step.reverse > * { direction: ltr; }
+  .hiw-step-num-col {
+    display: flex; align-items: center; justify-content: center;
+  }
+  .hiw-num {
+    font-family: 'Instrument Serif', serif;
+    font-size: clamp(6rem, 14vw, 10rem);
+    line-height: 1; color: var(--cream); letter-spacing: -0.04em;
+    user-select: none; position: relative;
+  }
+  .hiw-num::after {
+    content: attr(data-num);
+    position: absolute; inset: 0;
+    background: linear-gradient(135deg, var(--gold) 0%, #e8c97a 100%);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+    opacity: 0.18;
+  }
+  .hiw-step-content { display: flex; flex-direction: column; gap: 16px; }
+  .hiw-icon {
+    width: 52px; height: 52px; border-radius: 14px;
+    background: #fdf6e8; border: 1px solid #ede0c4;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.5rem; flex-shrink: 0;
+  }
+  .hiw-step-title {
+    font-family: 'Instrument Serif', serif;
+    font-size: clamp(1.4rem, 3vw, 1.9rem); line-height: 1.2;
+  }
+  .hiw-step-desc {
+    color: var(--muted); font-size: 1rem; line-height: 1.7; max-width: 380px;
+  }
+  .hiw-divider {
+    width: 1px; height: 48px; background: var(--border);
+    margin: 0 auto 72px; display: block;
+  }
+
+  /* ── Demo video placeholder ── */
+  .demo-section {
+    max-width: 760px; margin: 0 auto; padding: 0 24px 80px;
+  }
+  .demo-card {
+    position: relative; border-radius: 20px; overflow: hidden;
+    background: var(--ink); aspect-ratio: 16/9;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; border: 1px solid #1e1e1e;
+    box-shadow: 0 24px 64px rgba(14,14,14,0.18);
+  }
+  .demo-card::before {
+    content: ''; position: absolute; inset: 0;
+    background: radial-gradient(ellipse at 40% 50%, rgba(200,169,110,0.12) 0%, transparent 70%);
+  }
+  .demo-play {
+    position: relative; z-index: 1; display: flex; flex-direction: column;
+    align-items: center; gap: 20px;
+  }
+  .demo-play-btn {
+    width: 72px; height: 72px; border-radius: 50%;
+    background: var(--gold); border: none; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: transform 0.2s, box-shadow 0.2s;
+    box-shadow: 0 0 0 12px rgba(200,169,110,0.15);
+  }
+  .demo-play-btn:hover {
+    transform: scale(1.08);
+    box-shadow: 0 0 0 16px rgba(200,169,110,0.2);
+  }
+  .demo-play-triangle {
+    width: 0; height: 0;
+    border-top: 11px solid transparent;
+    border-bottom: 11px solid transparent;
+    border-left: 18px solid #fff;
+    margin-left: 3px;
+  }
+  .demo-label {
+    color: #fff; font-size: 1rem; font-weight: 500; letter-spacing: -0.01em;
+  }
+  .demo-sub {
+    color: #666; font-size: 0.82rem; text-align: center; margin-top: 4px;
+  }
+  .demo-badge {
+    position: absolute; top: 16px; left: 16px;
+    background: rgba(200,169,110,0.15); border: 1px solid rgba(200,169,110,0.3);
+    color: var(--gold); font-size: 0.72rem; font-weight: 600;
+    padding: 4px 12px; border-radius: 20px; letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  @media (max-width: 640px) {
+    .hiw-step { grid-template-columns: 1fr; gap: 24px; }
+    .hiw-step.reverse { direction: ltr; }
+    .hiw-step-num-col { justify-content: flex-start; }
+    .hiw-num { font-size: 5rem; }
+    .hiw-section { padding: 60px 20px 40px; }
+    .demo-section { padding: 0 20px 60px; }
+  }
 `;
 
 
@@ -2139,6 +2268,17 @@ function InAppPricing({ onGetStarted }) {
       }).catch(() => setDetected(true));
   }, []);
 
+  useEffect(() => {
+    const els = document.querySelectorAll('[data-reveal]');
+    const obs = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) { e.target.classList.add('revealed'); obs.unobserve(e.target); }
+      });
+    }, { threshold: 0.12 });
+    els.forEach(el => obs.observe(el));
+    return () => obs.disconnect();
+  }, []);
+
   const plans = [
     { id: "starter", name: "Starter", base: 497, popular: false, color: "var(--card)",
       features: ["3 video testimonials / month", "Branded invite emails", "AI-generated prompts", "Basic captions & editing", "Email support"] },
@@ -2171,6 +2311,98 @@ function InAppPricing({ onGetStarted }) {
           {cur.flag} Prices in {cur.symbol === "£" ? "GBP" : cur.symbol === "$" ? "USD" : cur.symbol === "€" ? "EUR" : "your currency"}
           {!detected && " · detecting…"}
         </div>
+      </div>
+
+      {/* ── How It Works ── */}
+      <div className="hiw-section">
+        <div style={{ textAlign: "center" }}>
+          <div className="hiw-label" data-reveal>How it works</div>
+          <div className="hiw-heading" data-reveal>
+            Three steps from invite<br />to <em style={{ color: "var(--gold)", fontStyle: "italic" }}>polished clip</em>
+          </div>
+        </div>
+
+        {/* Step 1 */}
+        <div className="hiw-step" data-reveal>
+          <div className="hiw-step-num-col">
+            <div className="hiw-num" data-num="01" aria-hidden="true">01</div>
+          </div>
+          <div className="hiw-step-content">
+            <div className="hiw-icon">📧</div>
+            <div className="hiw-step-title">You send an invite</div>
+            <div className="hiw-step-desc">
+              Add your client's name and email. We send them a beautifully branded invite with AI-generated questions tailored to your business. No chasing required.
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--gold)", display: "inline-block", flexShrink: 0 }} />
+              <span style={{ fontSize: "0.82rem", color: "var(--muted)" }}>Takes less than 60 seconds to send</span>
+            </div>
+          </div>
+        </div>
+
+        <span className="hiw-divider" data-reveal />
+
+        {/* Step 2 */}
+        <div className="hiw-step reverse" data-reveal>
+          <div className="hiw-step-num-col">
+            <div className="hiw-num" data-num="02" aria-hidden="true">02</div>
+          </div>
+          <div className="hiw-step-content">
+            <div className="hiw-icon">🎥</div>
+            <div className="hiw-step-title">They record in minutes</div>
+            <div className="hiw-step-desc">
+              Your client clicks the link and answers the questions on camera from any device. The guided prompts make it natural and easy — no script, no awkward silences.
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--gold)", display: "inline-block", flexShrink: 0 }} />
+              <span style={{ fontSize: "0.82rem", color: "var(--muted)" }}>Works on any phone, tablet or laptop</span>
+            </div>
+          </div>
+        </div>
+
+        <span className="hiw-divider" data-reveal />
+
+        {/* Step 3 */}
+        <div className="hiw-step" data-reveal>
+          <div className="hiw-step-num-col">
+            <div className="hiw-num" data-num="03" aria-hidden="true">03</div>
+          </div>
+          <div className="hiw-step-content">
+            <div className="hiw-icon">✨</div>
+            <div className="hiw-step-title">You get polished clips</div>
+            <div className="hiw-step-desc">
+              We edit, caption, and brand the raw footage. You receive multiple ready-to-use clips formatted for your website, LinkedIn, Instagram, and paid ads.
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--gold)", display: "inline-block", flexShrink: 0 }} />
+              <span style={{ fontSize: "0.82rem", color: "var(--muted)" }}>Delivered within 5 business days</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Demo Video Placeholder ── */}
+      <div className="demo-section" data-reveal>
+        <div className="demo-card">
+          <div className="demo-badge">60-second walkthrough</div>
+          <div className="demo-play">
+            <button className="demo-play-btn" aria-label="Watch demo">
+              <div className="demo-play-triangle" />
+            </button>
+            <div>
+              <div className="demo-label">Watch a 60-second walkthrough</div>
+              <div className="demo-sub">See how Vouch works from invite to polished clip</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Pricing heading ── */}
+      <div style={{ textAlign: "center", padding: "0 24px 32px" }} data-reveal>
+        <div style={{ fontFamily: "Instrument Serif, serif", fontSize: "clamp(1.6rem, 4vw, 2.4rem)", lineHeight: 1.15, letterSpacing: "-0.02em", marginBottom: 8 }}>
+          Simple, transparent <em style={{ color: "var(--gold)", fontStyle: "italic" }}>pricing</em>
+        </div>
+        <div style={{ color: "var(--muted)", fontSize: "0.95rem" }}>No hidden fees. Cancel anytime.</div>
       </div>
 
       {/* Plans */}

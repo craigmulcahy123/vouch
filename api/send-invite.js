@@ -18,7 +18,7 @@ module.exports = async function handler(req, res) {
       "Authorization": `Bearer ${process.env.RESEND_API_KEY}`,
     },
     body: JSON.stringify({
-      from: `${campaign.companyName} via Vouch <onboarding@resend.dev>`,
+      from: `${campaign.companyName} via Vouch <hello@vouchbusiness.com>`,
       to: [toEmail],
       subject: `${clientName}, share your experience with ${campaign.companyName}`,
       html,
