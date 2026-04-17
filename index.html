@@ -1478,11 +1478,13 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
     const hasVideos = Object.keys(videoBlobs).length > 0;
     let firebaseURLs = {};
 
-    if (hasVideos && storage && userId) {
+    // Use ownerId for storage path — the client is unauthenticated so userId is null
+    const storageUserId = ownerId || userId;
+    if (hasVideos && storage && storageUserId) {
       setSubmitPhase("uploading");
       try {
         firebaseURLs = await uploadVideos({
-          storage, userId,
+          storage, userId: storageUserId,
           campaignId: campaign?.id || "demo",
           videoBlobs,
           onProgress: (idx, pct) => setUploadProgress(prev => ({ ...prev, [idx]: pct })),
@@ -3228,10 +3230,18 @@ function App() {
       .where("id", "==", recordCampaignId)
       .limit(1)
       .get()
-      .then(snap => setRecordCampaign(
-        snap.empty ? { id: recordCampaignId, name: "Testimonial", prompts: [] }
-                   : snap.docs[0].data()
-      ))
+      .then(snap => {
+        if (snap.empty) {
+          setRecordCampaign({ id: recordCampaignId, name: "Testimonial", prompts: [] });
+          return;
+        }
+        const doc = snap.docs[0];
+        const data = doc.data();
+        // Derive ownerId from the Firestore path users/{ownerId}/campaigns/{campaignId}
+        // This is authoritative — works even if the ownerId field was never stored
+        const pathOwnerId = doc.ref.parent?.parent?.id;
+        setRecordCampaign({ ...data, ownerId: data.ownerId || pathOwnerId || null });
+      })
       .catch(() => setRecordCampaign({ id: recordCampaignId, name: "Testimonial", prompts: [] }));
   }, [recordCampaignId, db]);
 
