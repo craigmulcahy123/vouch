@@ -494,6 +494,84 @@ const style = `
   .step-dot { width: 8px; height: 8px; border-radius: 50%; background: #333; transition: background 0.2s; }
   .step-dot.active { background: var(--gold); }
 
+  /* ── Per-question recording screen ── */
+  .q-progress-wrap { margin-bottom: 28px; }
+  .q-progress-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .q-progress-label { color: var(--gold); font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; }
+  .q-progress-frac { color: #555; font-size: 0.75rem; font-weight: 600; }
+  .q-progress-track { width: 100%; height: 3px; background: #2a2a2a; border-radius: 99px; overflow: hidden; }
+  .q-progress-fill { height: 100%; background: var(--gold); border-radius: 99px; transition: width 0.4s cubic-bezier(0.16,1,0.3,1); }
+
+  .q-text {
+    font-family: 'Instrument Serif', serif; font-size: 1.55rem; line-height: 1.3;
+    margin-bottom: 10px; color: #fff;
+  }
+  .q-micro {
+    color: #666; font-size: 0.84rem; line-height: 1.5; margin-bottom: 24px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .q-micro.success { color: #5cb87a; }
+  .q-micro.retry   { color: #c8a96e; }
+
+  /* Question text overlay on live video */
+  .q-video-overlay {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    background: linear-gradient(transparent, rgba(0,0,0,0.85));
+    padding: 32px 20px 16px;
+    border-radius: 0 0 14px 14px;
+    pointer-events: none;
+  }
+  .q-video-overlay-text {
+    color: #fff; font-size: 0.88rem; line-height: 1.45; font-weight: 500;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.8);
+  }
+
+  /* Big record button with pulse ring */
+  .rec-ring-wrap {
+    display: flex; flex-direction: column; align-items: center; gap: 14px;
+    margin-bottom: 8px;
+  }
+  .rec-btn-big {
+    width: 68px; height: 68px; border-radius: 50%; border: none; cursor: pointer;
+    background: var(--rust); color: #fff; font-size: 1.4rem;
+    display: flex; align-items: center; justify-content: center;
+    transition: transform 0.2s; position: relative;
+  }
+  .rec-btn-big:hover { transform: scale(1.06); }
+  .rec-btn-big::before {
+    content: ''; position: absolute; inset: -6px; border-radius: 50%;
+    border: 2px solid rgba(184,92,56,0.35); animation: recPulse 1.8s ease-out infinite;
+  }
+  @keyframes recPulse {
+    0%   { transform: scale(1);   opacity: 1; }
+    100% { transform: scale(1.5); opacity: 0; }
+  }
+  .rec-btn-big-label { color: #666; font-size: 0.78rem; letter-spacing: 0.04em; }
+
+  /* Live recording controls */
+  .rec-live-row {
+    display: flex; align-items: center; justify-content: space-between;
+    background: #111; border-radius: 10px; padding: 10px 16px; margin-bottom: 8px;
+  }
+
+  /* Review action buttons */
+  .q-review-actions {
+    display: flex; gap: 10px; margin-bottom: 16px;
+  }
+  .q-review-actions .btn { flex: 1; justify-content: center; font-size: 0.88rem; }
+
+  /* Text fallback divider */
+  .q-or-divider {
+    text-align: center; color: #3a3a3a; font-size: 0.78rem;
+    margin: 16px 0; position: relative;
+  }
+  .q-or-divider::before, .q-or-divider::after {
+    content: ''; position: absolute; top: 50%; width: 40%; height: 1px;
+    background: #2a2a2a;
+  }
+  .q-or-divider::before { left: 0; }
+  .q-or-divider::after  { right: 0; }
+
   /* AI loading */
   .ai-generating {
     display: flex; align-items: center; gap: 10px; color: var(--gold);
@@ -1075,42 +1153,54 @@ function StarRating({ value, onChange }) {
 
 // ── Client Recording Page ──────────────────────────────────────────────────
 function ClientPage({ campaign, onBack, storage, userId, db }) {
-  const [step, setStep] = useState(0);
-  const [selectedPrompt, setSelectedPrompt] = useState(0);
-  const [answers, setAnswers] = useState({});
+  const prompts    = campaign?.prompts || [];
+  const ratingStep = prompts.length + 1;
+  const doneStep   = prompts.length + 2;
 
-  // Invite tracking — read inviteId from URL and update status automatically
+  // step: 0=intro, 1..N=questions, N+1=rating, N+2=done
+  const [step, setStep] = useState(0);
+  const qIdx = step - 1; // current question index, valid when step 1..N
+
+  // Per-question recording sub-state
+  const [recordPhase, setRecordPhase]     = useState("idle"); // "idle"|"recording"|"reviewing"
+  const [isRerecording, setIsRerecording] = useState(false);
+
+  // Form
+  const [answers, setAnswers]   = useState({});
+  const [rating, setRating]     = useState(0);
+  const [name, setName]         = useState("");
+  const [company, setCompany]   = useState("");
+
+  // Video
+  const [videoURLs, setVideoURLs]             = useState({});
+  const [videoBlobs, setVideoBlobs]           = useState({});
+  const [uploadProgress, setUploadProgress]   = useState({});
+  const [uploadedURLs, setUploadedURLs]       = useState({});
+  const [liveStream, setLiveStream]           = useState(null);
+  const [cameraAvailable, setCameraAvailable] = useState(null);
+
+  // Submit
+  const [submitting, setSubmitting]     = useState(false);
+  const [submitPhase, setSubmitPhase]   = useState("");
+  const [generatedQuote, setGeneratedQuote] = useState("");
+
+  // Refs
+  const videoRef         = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const chunksRef        = useRef([]);
+  const streamRef        = useRef(null);
+
+  // Invite tracking
   const inviteId = new URLSearchParams(window.location.search).get("inviteId");
-  const ownerId = campaign?.ownerId;
+  const ownerId  = campaign?.ownerId;
 
   useEffect(() => {
     if (!inviteId || !ownerId || !db) return;
     db.collection("users").doc(ownerId).collection("invites").doc(inviteId)
-      .update({ status: "opened", openedAt: Date.now() })
-      .catch(() => {}); // silently ignore if invite not found
+      .update({ status: "opened", openedAt: Date.now() }).catch(() => {});
   }, [inviteId, ownerId, db]);
-  const [rating, setRating] = useState(0);
-  const [name, setName] = useState("");
-  const [company, setCompany] = useState("");
-  const [recording, setRecording] = useState(false);
-  const [videoURLs, setVideoURLs] = useState({});     // local blob URLs for preview
-  const [videoBlobs, setVideoBlobs] = useState({});   // raw Blobs for upload
-  const [uploadProgress, setUploadProgress] = useState({}); // { [idx]: 0-100 }
-  const [uploadedURLs, setUploadedURLs] = useState({}); // Firebase download URLs
-  const [submitting, setSubmitting] = useState(false);
-  const [submitPhase, setSubmitPhase] = useState(""); // "uploading" | "analyzing" | ""
-  const [generatedQuote, setGeneratedQuote] = useState("");
-  const videoRef = useRef(null);
-  const mediaRecorderRef = useRef(null);
-  const chunksRef = useRef([]);
-  const streamRef = useRef(null);
-  const [liveStream, setLiveStream] = useState(null);
 
-  const prompts = campaign?.prompts || [];
-  const hasVideos = Object.keys(videoBlobs).length > 0;
-
-  // Check camera availability on mount
-  const [cameraAvailable, setCameraAvailable] = useState(null); // null=unknown, true, false
+  // Check camera once on mount
   useEffect(() => {
     if (!navigator.mediaDevices?.getUserMedia) { setCameraAvailable(false); return; }
     navigator.mediaDevices.getUserMedia({ video: true, audio: true })
@@ -1118,7 +1208,20 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
       .catch(() => setCameraAvailable(false));
   }, []);
 
-  // Apply live stream to video element once it mounts
+  // Reset recording state when navigating to a new question
+  useEffect(() => {
+    if (step >= 1 && step <= prompts.length) {
+      setRecordPhase("idle");
+      setIsRerecording(false);
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => t.stop());
+        streamRef.current = null;
+      }
+      setLiveStream(null);
+    }
+  }, [step]);
+
+  // Wire live stream to video element
   useEffect(() => {
     if (!videoRef.current || !liveStream) return;
     videoRef.current.srcObject = liveStream;
@@ -1126,102 +1229,91 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
   }, [liveStream]);
 
   async function startRecording() {
+    const capturedIdx = qIdx;
     try {
-      setRecording(true);
+      setRecordPhase("recording");
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       streamRef.current = stream;
-      setLiveStream(stream); // triggers effect to set srcObject once video element mounts
+      setLiveStream(stream);
       const mr = new MediaRecorder(stream);
       mediaRecorderRef.current = mr;
       chunksRef.current = [];
       mr.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       mr.onstop = () => {
         const blob = new Blob(chunksRef.current, { type: "video/webm" });
-        const url = URL.createObjectURL(blob);
-        setVideoURLs(prev => ({ ...prev, [selectedPrompt]: url }));
-        setVideoBlobs(prev => ({ ...prev, [selectedPrompt]: blob }));
+        const url  = URL.createObjectURL(blob);
+        setVideoURLs(prev  => ({ ...prev, [capturedIdx]: url }));
+        setVideoBlobs(prev => ({ ...prev, [capturedIdx]: blob }));
         setLiveStream(null);
+        setRecordPhase("reviewing");
         if (videoRef.current) {
           videoRef.current.srcObject = null;
-          videoRef.current.src = url;
-          videoRef.current.muted = false;
+          videoRef.current.src      = url;
+          videoRef.current.muted    = false;
           videoRef.current.controls = true;
           videoRef.current.load();
+          videoRef.current.play().catch(() => {});
         }
         stream.getTracks().forEach(t => t.stop());
       };
       mr.start();
       setCameraAvailable(true);
     } catch {
-      setRecording(false);
+      setRecordPhase("idle");
       setCameraAvailable(false);
     }
   }
 
-  function stopRecording() {
-    mediaRecorderRef.current?.stop();
-    setRecording(false);
+  function stopRecording() { mediaRecorderRef.current?.stop(); }
+
+  function advanceQuestion() {
+    if (qIdx >= prompts.length - 1) setStep(ratingStep);
+    else setStep(s => s + 1);
   }
 
   async function handleSubmit() {
     setSubmitting(true);
-
-    // Phase 1: upload videos to Firebase Storage
+    const hasVideos = Object.keys(videoBlobs).length > 0;
     let firebaseURLs = {};
+
     if (hasVideos && storage && userId) {
       setSubmitPhase("uploading");
       try {
         firebaseURLs = await uploadVideos({
-          storage,
-          userId,
+          storage, userId,
           campaignId: campaign?.id || "demo",
           videoBlobs,
-          onProgress: (idx, pct) =>
-            setUploadProgress(prev => ({ ...prev, [idx]: pct })),
+          onProgress: (idx, pct) => setUploadProgress(prev => ({ ...prev, [idx]: pct })),
         });
         setUploadedURLs(firebaseURLs);
-      } catch (e) {
-        console.error("Upload failed:", e);
-        // Continue anyway — we still have text answers
-      }
+      } catch (e) { console.error("Upload failed:", e); }
     }
 
-    // Phase 2: generate AI testimonial quote from text answers
     setSubmitPhase("analyzing");
     const quote = await analyzeTestimonial(answers, prompts);
     setGeneratedQuote(quote);
 
-    // Phase 3: save testimonial to Firestore
-    const ownerId = campaign?.ownerId;
     if (db && ownerId) {
       const tid = Date.now().toString();
       try {
         await db.collection("users").doc(ownerId).collection("testimonials").doc(tid).set({
-          id: tid,
-          name, company, rating,
-          answers,
+          id: tid, name, company, rating, answers,
           videoURLs: { ...uploadedURLs, ...firebaseURLs },
-          quote,
-          campaignId: campaign.id,
+          quote, campaignId: campaign.id,
           campaignName: campaign.name || "",
-          status: "new",
-          createdAt: Date.now(),
+          status: "new", createdAt: Date.now(),
         });
-      } catch (e) {
-        console.error("Failed to save testimonial:", e);
-      }
+      } catch (e) { console.error("Failed to save testimonial:", e); }
     }
 
-    // Mark invite as recorded
     if (inviteId && ownerId && db) {
       db.collection("users").doc(ownerId).collection("invites").doc(inviteId)
-        .update({ status: "recorded", recordedAt: Date.now() })
-        .catch(() => {});
+        .update({ status: "recorded", recordedAt: Date.now() }).catch(() => {});
     }
 
     setSubmitting(false);
     setSubmitPhase("");
-    setStep(3);
+    setStep(doneStep);
   }
 
   return (
@@ -1235,17 +1327,25 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
       <div className="client-logo" style={onBack ? { marginTop: 52 } : {}}>✦ Vouch</div>
 
       <div className="client-card">
+        {/* Stage dots: intro / questions / rating */}
         <div className="step-dots">
-          {[0,1,2].map(i => <div key={i} className={`step-dot ${step === i ? "active" : ""}`} />)}
+          {[0, 1, 2].map(dot => (
+            <div key={dot} className={`step-dot ${
+              (dot === 0 && step === 0) ||
+              (dot === 1 && step >= 1 && step <= prompts.length) ||
+              (dot === 2 && step === ratingStep)
+                ? "active" : ""
+            }`} />
+          ))}
         </div>
 
-        {/* Step 0: Intro */}
+        {/* ── Step 0: About You ── */}
         {step === 0 && (
           <>
             <div className="client-step">Step 1 of 3 — About You</div>
             <div className="client-title">Share your experience</div>
             <div className="client-sub">
-              {campaign?.name ? `${campaign.companyName} would love to hear from you.` : "We'd love to hear about your experience."} It only takes a few minutes.
+              {campaign?.companyName ? `${campaign.companyName} would love to hear from you.` : "We'd love to hear about your experience."} It only takes a few minutes.
             </div>
             <div className="field" style={{ marginBottom: 14 }}>
               <label style={{ color: "#888" }}>Your Name</label>
@@ -1259,113 +1359,158 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
             </div>
             <button className="btn btn-gold" style={{ width: "100%", justifyContent: "center" }}
               disabled={!name} onClick={() => setStep(1)}>
-              Continue →
+              Let's go →
             </button>
           </>
         )}
 
-        {/* Step 1: Respond to prompts */}
-        {step === 1 && (
+        {/* ── Steps 1..N: One question per screen ── */}
+        {step >= 1 && step <= prompts.length && (
           <>
-            <div className="client-step">Step 2 of 3 — Your Answers</div>
-            <div className="client-title">Answer a few questions</div>
-            <div className="client-sub">Pick each question and record a short video response, or type your answer.</div>
-
-            <div style={{ marginBottom: 20 }}>
-              {prompts.map((p, i) => (
-                <div key={i} className={`prompt-card ${selectedPrompt === i ? "selected" : ""}`}
-                  onClick={() => setSelectedPrompt(i)}>
-                  <div className="prompt-num">{i + 1}</div>
-                  <div className="prompt-q">{p}
-                    {videoURLs[i] && <span style={{ display: "block", color: "#5a9a5a", fontSize: "0.78rem", marginTop: 4 }}>✓ Recorded</span>}
-                    {answers[i] && !videoURLs[i] && <span style={{ display: "block", color: "#5a9a5a", fontSize: "0.78rem", marginTop: 4 }}>✓ Written</span>}
-                  </div>
-                </div>
-              ))}
+            {/* Progress bar */}
+            <div className="q-progress-wrap">
+              <div className="q-progress-header">
+                <span className="q-progress-label">Question {step} of {prompts.length}</span>
+                <span className="q-progress-frac">{Math.round((step / prompts.length) * 100)}%</span>
+              </div>
+              <div className="q-progress-track">
+                <div className="q-progress-fill" style={{ width: `${(step / prompts.length) * 100}%` }} />
+              </div>
             </div>
 
-            <div style={{ background: "#111", border: "1px solid #2a2a2a", borderRadius: 14, padding: 20, marginBottom: 20 }}>
-              <div style={{ color: "#888", fontSize: "0.78rem", marginBottom: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                Q{selectedPrompt + 1}: {prompts[selectedPrompt]}
+            {/* Question text */}
+            <div className="q-text">{prompts[qIdx]}</div>
+
+            {/* Contextual micro-copy */}
+            {recordPhase === "idle" && (
+              <div className={`q-micro ${isRerecording ? "retry" : ""}`}>
+                {isRerecording
+                  ? "↩ No problem — take your time"
+                  : "Take a breath, speak naturally — there are no wrong answers"}
               </div>
-
-              {/* Video area — only shown when camera is available */}
-              {cameraAvailable === false ? (
-                <div style={{ background: "#0d0d0d", border: "1px dashed #2a2a2a", borderRadius: 12, padding: "24px 20px", marginBottom: 14, textAlign: "center" }}>
-                  <div style={{ fontSize: "2rem", marginBottom: 8 }}>📝</div>
-                  <div style={{ color: "#666", fontSize: "0.85rem", lineHeight: 1.5, marginBottom: 4 }}>
-                    Camera isn't available in this preview
-                  </div>
-                  <div style={{ color: "#444", fontSize: "0.78rem" }}>
-                    Type your answer below — it works just as well
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <div className="video-area" style={{ marginBottom: 14 }}>
-                    {!(liveStream || videoURLs[selectedPrompt]) ? (
-                      <div className="video-placeholder">
-                        <div className="video-icon">🎥</div>
-                        <div className="video-hint">{cameraAvailable === null ? "Checking camera…" : "Press record to answer on camera"}</div>
-                      </div>
-                    ) : (
-                      <video ref={videoRef} autoPlay={!!liveStream} muted={!!liveStream} playsInline controls={!liveStream} style={{ width: "100%", borderRadius: 12 }} src={videoURLs[selectedPrompt] || ""} />
-                    )}
-                  </div>
-                  <div className="rec-controls">
-                    {!recording ? (
-                      <button className="rec-btn rec-btn-record" onClick={startRecording} title="Start recording">⏺</button>
-                    ) : (
-                      <>
-                        <div className="rec-indicator"><div className="rec-dot" /> Recording</div>
-                        <button className="rec-btn rec-btn-stop" onClick={stopRecording} title="Stop">⏹</button>
-                      </>
-                    )}
-                  </div>
-                </>
-              )}
-
-              <div style={{ textAlign: "center", color: "#555", fontSize: "0.8rem", marginBottom: 12 }}>
-                {cameraAvailable === false ? "Your written answer" : "— or type your answer —"}
+            )}
+            {recordPhase === "recording" && (
+              <div className="q-micro" style={{ color: "#b85c38" }}>
+                <div className="rec-dot" style={{ flexShrink: 0, marginRight: 4 }} /> Recording — speak naturally
               </div>
-              <textarea
-                style={{ width: "100%", background: "#1a1a1a", border: "1.5px solid #2a2a2a", color: "#fff", borderRadius: 9, padding: "12px 14px", fontFamily: "DM Sans, sans-serif", fontSize: "0.9rem", resize: "vertical", minHeight: 80, outline: "none" }}
-                placeholder="Type your answer here..."
-                value={answers[selectedPrompt] || ""}
-                onChange={e => setAnswers(prev => ({ ...prev, [selectedPrompt]: e.target.value }))}
-              />
-            </div>
+            )}
+            {recordPhase === "reviewing" && (
+              <div className="q-micro success">✓ Great! Watch your answer back before moving on</div>
+            )}
 
-            <button className="btn btn-gold" style={{ width: "100%", justifyContent: "center" }}
-              onClick={() => setStep(2)}>
-              Continue to Rating →
-            </button>
+            {/* Video area */}
+            {cameraAvailable !== false && (
+              <div className="video-area" style={{ marginBottom: 16 }}>
+                {/* Idle placeholder — only when no recording yet */}
+                {recordPhase === "idle" && !videoURLs[qIdx] && (
+                  <div className="video-placeholder">
+                    <div className="video-icon">🎥</div>
+                    <div className="video-hint">
+                      {cameraAvailable === null ? "Checking camera…" : "Tap record to answer on camera"}
+                    </div>
+                  </div>
+                )}
+
+                {/* Video element — live feed or playback */}
+                {(liveStream || videoURLs[qIdx]) && (
+                  <video
+                    key={`${step}-${recordPhase}`}
+                    ref={videoRef}
+                    playsInline
+                    autoPlay={recordPhase === "recording"}
+                    muted={recordPhase === "recording"}
+                    controls={recordPhase === "reviewing"}
+                    style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 14 }}
+                    src={recordPhase !== "recording" ? (videoURLs[qIdx] || "") : undefined}
+                  />
+                )}
+
+                {/* Question text overlay during live recording */}
+                {recordPhase === "recording" && (
+                  <div className="q-video-overlay">
+                    <div className="q-video-overlay-text">{prompts[qIdx]}</div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* No camera notice */}
+            {cameraAvailable === false && (
+              <div style={{ background: "#0d0d0d", border: "1px dashed #2a2a2a", borderRadius: 12, padding: "20px", marginBottom: 16, textAlign: "center" }}>
+                <div style={{ fontSize: "1.5rem", marginBottom: 6 }}>📝</div>
+                <div style={{ color: "#666", fontSize: "0.85rem" }}>No camera — type your answer below</div>
+              </div>
+            )}
+
+            {/* Record button */}
+            {cameraAvailable !== false && recordPhase === "idle" && (
+              <div className="rec-ring-wrap" style={{ marginBottom: 16 }}>
+                <button className="rec-btn-big" onClick={startRecording} aria-label="Start recording">⏺</button>
+                <span className="rec-btn-big-label">Tap to record</span>
+              </div>
+            )}
+
+            {/* Live recording controls */}
+            {recordPhase === "recording" && (
+              <div className="rec-live-row" style={{ marginBottom: 16 }}>
+                <div className="rec-indicator"><div className="rec-dot" /> Recording…</div>
+                <button className="rec-btn rec-btn-stop" onClick={stopRecording}>⏹ Stop</button>
+              </div>
+            )}
+
+            {/* Post-review action buttons */}
+            {recordPhase === "reviewing" && (
+              <div className="q-review-actions">
+                <button className="btn btn-outline" style={{ color: "#aaa", borderColor: "#333" }}
+                  onClick={() => { setIsRerecording(true); setRecordPhase("idle"); }}>
+                  ↩ Re-record
+                </button>
+                <button className="btn btn-gold" onClick={advanceQuestion}>
+                  {qIdx >= prompts.length - 1 ? "Looks good, finish →" : "Looks good, next →"}
+                </button>
+              </div>
+            )}
+
+            {/* Text answer */}
+            {recordPhase !== "recording" && (
+              <>
+                <div className="q-or-divider">or type your answer</div>
+                <textarea
+                  style={{ width: "100%", background: "#111", border: `1.5px solid ${answers[qIdx] ? "#c8a96e55" : "#2a2a2a"}`, color: "#fff", borderRadius: 9, padding: "12px 14px", fontFamily: "DM Sans, sans-serif", fontSize: "0.9rem", resize: "vertical", minHeight: 90, outline: "none", transition: "border-color 0.2s" }}
+                  placeholder="Type your answer here…"
+                  value={answers[qIdx] || ""}
+                  onChange={e => setAnswers(prev => ({ ...prev, [qIdx]: e.target.value }))}
+                />
+              </>
+            )}
+
+            {/* Text-only advance (no video recorded yet) */}
+            {recordPhase !== "reviewing" && recordPhase !== "recording" && answers[qIdx] && !videoURLs[qIdx] && (
+              <button className="btn btn-gold" style={{ width: "100%", justifyContent: "center", marginTop: 14 }}
+                onClick={advanceQuestion}>
+                {qIdx >= prompts.length - 1 ? "Continue to rating →" : "Next question →"}
+              </button>
+            )}
           </>
         )}
 
-        {/* Step 2: Rating */}
-        {step === 2 && (
+        {/* ── Rating ── */}
+        {step === ratingStep && (
           <>
-            <div className="client-step">Step 3 of 3 — Rating</div>
+            <div className="client-step">Final step — Your Rating</div>
             <div className="client-title" style={{ textAlign: "center" }}>How would you rate your experience?</div>
-            <div className="client-sub" style={{ textAlign: "center", marginBottom: 28 }}>
-              Your honest feedback means a lot.
-            </div>
+            <div className="client-sub" style={{ textAlign: "center", marginBottom: 28 }}>Your honest feedback means a lot.</div>
             <StarRating value={rating} onChange={setRating} />
 
             {submitting ? (
               <div>
-                {submitPhase === "uploading" && hasVideos && (
+                {submitPhase === "uploading" && Object.keys(videoBlobs).length > 0 && (
                   <div className="upload-progress">
-                    <div style={{ color: "#888", fontSize: "0.78rem", marginBottom: 12, textAlign: "center", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                      Uploading videos…
-                    </div>
+                    <div style={{ color: "#888", fontSize: "0.78rem", marginBottom: 12, textAlign: "center", textTransform: "uppercase", letterSpacing: "0.06em" }}>Uploading videos…</div>
                     {Object.keys(videoBlobs).map(idx => (
                       <div key={idx} className="upload-row">
                         <div className="upload-label">Q{Number(idx)+1}</div>
-                        <div className="progress-track">
-                          <div className="progress-fill" style={{ width: `${uploadProgress[idx] || 0}%` }} />
-                        </div>
+                        <div className="progress-track"><div className="progress-fill" style={{ width: `${uploadProgress[idx] || 0}%` }} /></div>
                         <div className="progress-pct">{uploadProgress[idx] || 0}%</div>
                       </div>
                     ))}
@@ -1387,8 +1532,8 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
           </>
         )}
 
-        {/* Step 3: Done */}
-        {step === 3 && (
+        {/* ── Done ── */}
+        {step === doneStep && (
           <div className="success-screen">
             <div className="success-icon">🌟</div>
             <div className="success-title">Thank you, {name}!</div>
@@ -1396,14 +1541,12 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
             {generatedQuote && (
               <div style={{ background: "#111", border: "1px solid #2a2a2a", borderRadius: 12, padding: 20, textAlign: "left", marginBottom: 20 }}>
                 <div style={{ color: "#888", fontSize: "0.78rem", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.06em" }}>Your testimonial preview</div>
-                <div style={{ fontFamily: "Instrument Serif, serif", fontSize: "1.05rem", fontStyle: "italic", color: "#ddd", lineHeight: 1.6 }}>
-                  "{generatedQuote}"
-                </div>
+                <div style={{ fontFamily: "Instrument Serif, serif", fontSize: "1.05rem", fontStyle: "italic", color: "#ddd", lineHeight: 1.6 }}>"{generatedQuote}"</div>
               </div>
             )}
-            <button className="btn btn-outline" style={{ color: "#888", borderColor: "#333" }} onClick={onBack}>
-              ← Back to app
-            </button>
+            {onBack && (
+              <button className="btn btn-outline" style={{ color: "#888", borderColor: "#333" }} onClick={onBack}>← Back to app</button>
+            )}
           </div>
         )}
       </div>
