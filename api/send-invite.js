@@ -8,7 +8,11 @@ module.exports = async function handler(req, res) {
     return res.status(400).json({ error: "Missing required fields" });
   }
 
-  const recordingLink = `${req.headers.origin}/record/${campaign.id}${inviteId ? `?inviteId=${inviteId}` : ""}`;
+  const params = new URLSearchParams();
+  if (inviteId) params.set("inviteId", inviteId);
+  if (campaign.ownerId) params.set("owner", campaign.ownerId);
+  const qs = params.toString();
+  const recordingLink = `${req.headers.origin}/record/${campaign.id}${qs ? `?${qs}` : ""}`;
   const html = buildEmailHTML({ clientName, companyName: campaign.companyName, campaignName: campaign.name, prompts: campaign.prompts, recordingLink });
 
   const response = await fetch("https://api.resend.com/emails", {
