@@ -2641,6 +2641,7 @@ function Dashboard({ onPreview, userId, db, onUpgrade }) {
   const [inviteTarget, setInviteTarget] = useState(null);
   const [playbackTarget, setPlaybackTarget] = useState(null);
   const [editTarget, setEditTarget] = useState(null);
+  const [downloadDropdown, setDownloadDropdown] = useState(null);
 
   const [campaigns, setCampaigns] = useState([]);
   const [testimonials, setTestimonials] = useState([]);
@@ -2716,6 +2717,43 @@ function Dashboard({ onPreview, userId, db, onUpgrade }) {
   function copyLink(id) {
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
+  }
+
+  async function downloadVideo(url, filename) {
+    try {
+      const res = await fetch(url);
+      const blob = await res.blob();
+      const objUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(objUrl);
+    } catch (e) {
+      alert("Download failed. Try right-clicking the video in the Watch view and saving.");
+    }
+  }
+
+  function downloadQuoteText(t) {
+    const lines = [
+      `Name: ${t.clientName || ""}`,
+      t.clientCompany ? `Company: ${t.clientCompany}` : null,
+      t.campaignName ? `Campaign: ${t.campaignName}` : null,
+      t.rating ? `Rating: ${"★".repeat(t.rating)}${"☆".repeat(5 - t.rating)}` : null,
+      "",
+      t.quote || "(No AI quote generated yet)",
+    ].filter(l => l !== null).join("\n");
+    const blob = new Blob([lines], { type: "text/plain" });
+    const objUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = objUrl;
+    a.download = `${(t.clientName || "testimonial").replace(/\s+/g, "-")}-quote.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(objUrl);
   }
 
   return (
@@ -2940,7 +2978,65 @@ function Dashboard({ onPreview, userId, db, onUpgrade }) {
                         ▶ Watch
                       </button>
                     )}
-                    <button className="btn btn-sm btn-outline">Export</button>
+                    <div style={{ position: "relative" }}>
+                      <button
+                        className="btn btn-sm btn-outline"
+                        style={{ color: "#c8a96e", borderColor: "#c8a96e", width: "100%" }}
+                        onClick={() => setDownloadDropdown(downloadDropdown === t.id ? null : t.id)}>
+                        ⬇ Download
+                      </button>
+                      {downloadDropdown === t.id && (
+                        <>
+                          <div
+                            style={{ position: "fixed", inset: 0, zIndex: 99 }}
+                            onClick={() => setDownloadDropdown(null)}
+                          />
+                          <div style={{
+                            position: "absolute", right: 0, bottom: "calc(100% + 6px)",
+                            background: "#161616", border: "1px solid #2c2c2c",
+                            borderRadius: 10, boxShadow: "0 8px 28px rgba(0,0,0,0.6)",
+                            minWidth: 230, zIndex: 100, overflow: "hidden",
+                          }}>
+                            {t.videoURLs && Object.keys(t.videoURLs).length > 0 ? (
+                              <>
+                                {Object.entries(t.videoURLs).map(([key, url], i) => (
+                                  <button key={key}
+                                    style={{ display: "block", width: "100%", background: "none", border: "none", borderBottom: "1px solid #222", padding: "11px 16px", textAlign: "left", color: "#e0dbd0", fontSize: "0.86rem", cursor: "pointer", fontFamily: "DM Sans, sans-serif" }}
+                                    onMouseEnter={e => e.currentTarget.style.background = "#222"}
+                                    onMouseLeave={e => e.currentTarget.style.background = "none"}
+                                    onClick={() => {
+                                      downloadVideo(url, `${(t.clientName || "clip").replace(/\s+/g, "-")}-Q${Number(key) + 1}.webm`);
+                                      setDownloadDropdown(null);
+                                    }}>
+                                    🎥 Download Q{Number(key) + 1} video
+                                  </button>
+                                ))}
+                                <button
+                                  style={{ display: "block", width: "100%", background: "none", border: "none", padding: "11px 16px", textAlign: "left", color: "#e0dbd0", fontSize: "0.86rem", cursor: "pointer", fontFamily: "DM Sans, sans-serif" }}
+                                  onMouseEnter={e => e.currentTarget.style.background = "#222"}
+                                  onMouseLeave={e => e.currentTarget.style.background = "none"}
+                                  onClick={() => { downloadQuoteText(t); setDownloadDropdown(null); }}>
+                                  📄 Download AI quote (text)
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <div style={{ padding: "12px 16px", color: "#666", fontSize: "0.82rem", lineHeight: 1.5, borderBottom: "1px solid #222" }}>
+                                  No videos uploaded yet — videos appear here after the client records via the link.
+                                </div>
+                                <button
+                                  style={{ display: "block", width: "100%", background: "none", border: "none", padding: "11px 16px", textAlign: "left", color: "#e0dbd0", fontSize: "0.86rem", cursor: "pointer", fontFamily: "DM Sans, sans-serif" }}
+                                  onMouseEnter={e => e.currentTarget.style.background = "#222"}
+                                  onMouseLeave={e => e.currentTarget.style.background = "none"}
+                                  onClick={() => { downloadQuoteText(t); setDownloadDropdown(null); }}>
+                                  📄 Download AI quote (text)
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}
