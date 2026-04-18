@@ -1308,70 +1308,83 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
   const ratingStep = prompts.length + 2;
   const doneStep   = prompts.length + 3;
   const [step, setStep] = useState(0);
-  const qIdx = step - 2; // 0-based question index, valid when step 2..N+1
+  const qIdx = step - 2; // 0-based question index, valid when step >= 2
 
-  // localStorage
-  const lsKey = campaign?.id ? `vouch_${campaign.id}` : null;
-  const [showResumeBanner, setShowResumeBanner] = useState(false);
-  const [savedProgress, setSavedProgress]       = useState(null);
+  // Name / company — stored in state but inputs are UNCONTROLLED refs
+  // so typing never triggers a re-render (fixes mobile keyboard dismissal)
+  const [name, setName]       = useState("");
+  const [company, setCompany] = useState("");
+  const nameRef               = useRef(null);
+  const companyRef            = useRef(null);
 
   // Camera test
   const [camTestChecks, setCamTestChecks] = useState([false, false, false]);
 
   // Per-question recording
-  const [recordPhase, setRecordPhase]     = useState("idle"); // "idle"|"recording"|"reviewing"
+  const [recordPhase, setRecordPhase]     = useState("idle"); // idle | recording | reviewing
   const [isRerecording, setIsRerecording] = useState(false);
-  const [countdown, setCountdown]         = useState(null);
+  const [countdown, setCountdown]         = useState(null);   // 3 | 2 | 1 | 0 | null
   const [recSecs, setRecSecs]             = useState(0);
 
   // Talking points
-  const [talkingPoints, setTalkingPoints] = useState({});
+  const [talkingPoints, setTalkingPoints] = useState({}); // { [qIdx]: string[] | null | undefined }
 
-  // Form
-  const [answers, setAnswers] = useState({});
-  const [rating, setRating]   = useState(0);
-  const [name, setName]       = useState("");
-  const [company, setCompany] = useState("");
-
-  // Video
-  const [videoURLs, setVideoURLs]           = useState({});
-  const [videoBlobs, setVideoBlobs]         = useState({});
-  const [uploadProgress, setUploadProgress] = useState({});
-  const [liveStream, setLiveStream]         = useState(null);
+  // Answers / video
+  const [answers, setAnswers]             = useState({});
+  const [videoURLs, setVideoURLs]         = useState({});
+  const [videoBlobs, setVideoBlobs]       = useState({});
+  const [liveStream, setLiveStream]       = useState(null);
   const [cameraAvailable, setCameraAvailable] = useState(null);
 
-  // Submit
+  // Rating & submit
+  const [rating, setRating]               = useState(0);
   const [submitting, setSubmitting]       = useState(false);
-  const [submitPhase, setSubmitPhase]     = useState("");
+  const [submitPhase, setSubmitPhase]     = useState(""); // uploading | analyzing
+  const [uploadProgress, setUploadProgress] = useState({});
   const [generatedQuote, setGeneratedQuote] = useState("");
+
+  // localStorage resume
+  const lsKey = campaign?.id ? `vouch_${campaign.id}` : null;
+  const [showResumeBanner, setShowResumeBanner] = useState(false);
+  const [savedProgress, setSavedProgress]       = useState(null);
 
   // Refs
   const videoRef         = useRef(null);
+  const camTestVideoRef  = useRef(null);
   const mediaRecorderRef = useRef(null);
   const chunksRef        = useRef([]);
   const streamRef        = useRef(null);
-  const camTestVideoRef  = useRef(null);
   const camTestStreamRef = useRef(null);
 
-  // Invite tracking
+  // Invite / owner
   const inviteId = new URLSearchParams(window.location.search).get("inviteId");
   const ownerId  = campaign?.ownerId;
 
+  // ── Effects ──────────────────────────────────────────────────────────────
+
+  // Mark invite as opened
   useEffect(() => {
     if (!inviteId || !ownerId || !db) return;
     db.collection("users").doc(ownerId).collection("invites").doc(inviteId)
       .update({ status: "opened", openedAt: Date.now() }).catch(() => {});
   }, [inviteId, ownerId, db]);
 
-  // Non-blocking mount camera check — camera test is authoritative
+  // Load saved progress from localStorage
   useEffect(() => {
-    if (!navigator.mediaDevices?.getUserMedia) { setCameraAvailable(false); return; }
-    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-      .then(s => { s.getTracks().forEach(t => t.stop()); setCameraAvailable(prev => prev ?? true); })
-      .catch(() => setCameraAvailable(prev => prev ?? false));
+    if (!lsKey) return;
+    try {
+      const saved = JSON.parse(localStorage.getItem(lsKey) || "null");
+      if (saved && saved.step >= 2 && saved.name) { setSavedProgress(saved); setShowResumeBanner(true); }
+    } catch {}
   }, []);
 
-  // Step 1: camera test live preview
+  // Auto-save progress on question steps
+  useEffect(() => {
+    if (!lsKey || step < 2) return;
+    try { localStorage.setItem(lsKey, JSON.stringify({ name, company, step, answers })); } catch {}
+  }, [step, name, company, answers]);
+
+  // Step 1: camera test — open preview stream
   useEffect(() => {
     if (step !== 1) {
       if (camTestStreamRef.current) {
@@ -1399,7 +1412,7 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
     };
   }, [step]);
 
-  // Steps 2..N+1: reset state and auto-open camera preview on each question
+  // Steps 2..N+1: reset + auto-open camera preview on each question
   useEffect(() => {
     if (step < 2 || step > prompts.length + 1) return;
     setRecordPhase("idle");
@@ -1415,14 +1428,14 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
     }
   }, [step]);
 
-  // Wire liveStream to video element
+  // Wire live stream to video element
   useEffect(() => {
     if (!videoRef.current || !liveStream) return;
     videoRef.current.srcObject = liveStream;
     videoRef.current.play().catch(() => {});
   }, [liveStream]);
 
-  // Fetch all talking points on mount
+  // Fetch talking points for all questions once on mount
   useEffect(() => {
     if (!prompts.length) return;
     prompts.forEach((question, i) => {
@@ -1430,14 +1443,16 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
         body: JSON.stringify({ action: "talkingPoints", question }) })
         .then(r => r.json())
         .then(data => {
-          try { const pts = JSON.parse(data.text); setTalkingPoints(prev => ({ ...prev, [i]: Array.isArray(pts) ? pts : null })); }
-          catch { setTalkingPoints(prev => ({ ...prev, [i]: null })); }
+          try {
+            const pts = JSON.parse(data.text);
+            setTalkingPoints(prev => ({ ...prev, [i]: Array.isArray(pts) ? pts : null }));
+          } catch { setTalkingPoints(prev => ({ ...prev, [i]: null })); }
         })
         .catch(() => setTalkingPoints(prev => ({ ...prev, [i]: null })));
     });
   }, []);
 
-  // Countdown → startRecording
+  // 3-2-1 countdown → startRecording
   useEffect(() => {
     if (countdown === null) return;
     if (countdown === 0) { setCountdown(null); startRecording(); return; }
@@ -1453,27 +1468,23 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
     return () => clearInterval(t);
   }, [recordPhase]);
 
-  // Load saved progress
-  useEffect(() => {
-    if (!lsKey) return;
-    try {
-      const saved = JSON.parse(localStorage.getItem(lsKey) || "null");
-      if (saved && saved.step >= 2 && saved.name) { setSavedProgress(saved); setShowResumeBanner(true); }
-    } catch {}
-  }, []);
+  // ── Handlers ──────────────────────────────────────────────────────────────
 
-  // Auto-save progress
-  useEffect(() => {
-    if (!lsKey || step < 2) return;
-    try { localStorage.setItem(lsKey, JSON.stringify({ name, company, step, answers })); } catch {}
-  }, [step, name, company, answers]);
+  // Read uncontrolled input values from refs on submit — no re-render during typing
+  function handleNameContinue() {
+    const n = (nameRef.current?.value || "").trim();
+    if (!n) return;
+    setName(n);
+    setCompany((companyRef.current?.value || "").trim());
+    setCamTestChecks([false, false, false]);
+    setStep(1);
+  }
 
   async function startRecording() {
     const capturedIdx = qIdx;
     try {
       setRecordPhase("recording");
-      // Reuse the auto-opened preview stream if available
-      let stream = streamRef.current;
+      let stream = streamRef.current; // reuse auto-opened preview stream
       if (!stream) {
         stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         streamRef.current = stream;
@@ -1489,6 +1500,7 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
         const url  = URL.createObjectURL(blob);
         setVideoURLs(prev  => ({ ...prev, [capturedIdx]: url }));
         setVideoBlobs(prev => ({ ...prev, [capturedIdx]: blob }));
+        stream.getTracks().forEach(t => t.stop());
         streamRef.current = null;
         setLiveStream(null);
         setRecordPhase("reviewing");
@@ -1500,7 +1512,6 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
           videoRef.current.load();
           videoRef.current.play().catch(() => {});
         }
-        stream.getTracks().forEach(t => t.stop());
       };
       mr.start();
     } catch {
@@ -1569,112 +1580,134 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
   function fmtSecs(s) { return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }
 
   const isQuestion = step >= 2 && step <= prompts.length + 1;
+  const topPad = onBack ? 52 : 0;
 
-  // Preview bar (dashboard preview mode)
-  const previewBar = onBack && !isQuestion && (
+  // Dashboard preview bar (fixed at top when previewing from dashboard)
+  const previewBar = onBack ? (
     <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 200, background: "rgba(10,10,10,0.92)", backdropFilter: "blur(8px)", borderBottom: "1px solid #222", padding: "10px 20px", display: "flex", alignItems: "center", gap: 16 }}>
       <button className="btn btn-outline btn-sm" style={{ color: "#aaa", borderColor: "#444" }} onClick={onBack}>← Dashboard</button>
       <span style={{ fontSize: "0.78rem", color: "#555" }}>Preview mode</span>
     </div>
-  );
+  ) : null;
 
-  // ── Shared card wrapper for non-question steps ──
-  function CardPage({ pageKey, children }) {
-    return (
-      <div key={pageKey} className="cp-slide" style={{ display: "flex", flexDirection: "column", minHeight: "100vh", alignItems: "center", justifyContent: "center", padding: "40px 20px" }}>
-        <div className="client-logo" style={(onBack && !isQuestion) ? { marginTop: 52 } : {}}>✦ Vouch</div>
-        <div className="client-card">{children}</div>
-      </div>
-    );
-  }
+  // Shared wrapper style for centered card steps (name, camera, rating, done)
+  const centeredStep = { minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: `${topPad + 40}px 20px 40px` };
 
   return (
-    <div className="client-page" style={{ padding: 0, background: "#0a0a0a" }}>
-      {previewBar}
+    <div style={{ background: "#0a0a0a", minHeight: "100vh", color: "#fff" }}>
 
-      {/* ── Page 0: Name entry ── */}
+      {/* ── Step 0: Name entry ────────────────────────────────────────────── */}
       {step === 0 && (
-        <CardPage pageKey="intro">
-          {showResumeBanner && (
-            <div className="resume-banner">
-              <div className="resume-banner-text"><strong>Welcome back!</strong>Continue where you left off?</div>
-              <div className="resume-banner-actions">
-                <button className="btn btn-sm btn-outline" style={{ color: "#8fcf8f", borderColor: "#2a4a2a", fontSize: "0.78rem" }}
-                  onClick={() => { setName(savedProgress.name||""); setCompany(savedProgress.company||""); setAnswers(savedProgress.answers||{}); setStep(savedProgress.step||2); setShowResumeBanner(false); }}>
-                  Resume
-                </button>
-                <button className="btn btn-sm btn-outline" style={{ color: "#555", borderColor: "#222", fontSize: "0.78rem" }}
-                  onClick={() => { setShowResumeBanner(false); if (lsKey) try { localStorage.removeItem(lsKey); } catch {} }}>
-                  Start over
-                </button>
+        <div style={centeredStep}>
+          {previewBar}
+          <div className="client-logo">✦ Vouch</div>
+          <div className="client-card">
+            {showResumeBanner && (
+              <div className="resume-banner">
+                <div className="resume-banner-text">
+                  <strong>Welcome back!</strong> Continue where you left off?
+                </div>
+                <div className="resume-banner-actions">
+                  <button className="btn btn-sm btn-outline" style={{ color: "#8fcf8f", borderColor: "#2a4a2a", fontSize: "0.78rem" }}
+                    onClick={() => { setName(savedProgress.name||""); setCompany(savedProgress.company||""); setAnswers(savedProgress.answers||{}); setStep(savedProgress.step||2); setShowResumeBanner(false); }}>
+                    Resume
+                  </button>
+                  <button className="btn btn-sm btn-outline" style={{ color: "#555", borderColor: "#222", fontSize: "0.78rem" }}
+                    onClick={() => { setShowResumeBanner(false); if (lsKey) try { localStorage.removeItem(lsKey); } catch {} }}>
+                    Start over
+                  </button>
+                </div>
+              </div>
+            )}
+            <div className="time-badge">⏱ Takes about 5 minutes</div>
+            <div className="client-step">Let's get started</div>
+            <div className="client-title">Share your experience</div>
+            <div className="client-sub">
+              {campaign?.companyName ? `${campaign.companyName} would love to hear from you.` : "We'd love to hear about your experience."} It only takes a few minutes.
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 24 }}>
+              <div className="field">
+                <label style={{ color: "#888" }}>Your first name</label>
+                {/* Uncontrolled input — defaultValue only sets initial value, no re-render on keypress */}
+                <input
+                  ref={nameRef}
+                  defaultValue={name}
+                  placeholder="Jane"
+                  autoComplete="given-name"
+                  style={{ background: "#111", border: "1.5px solid #333", color: "#fff", borderRadius: 9, padding: "13px 14px", fontFamily: "DM Sans, sans-serif", fontSize: "1rem", outline: "none", width: "100%" }}
+                />
+              </div>
+              <div className="field">
+                <label style={{ color: "#888" }}>Company <span style={{ color: "#555" }}>(optional)</span></label>
+                <input
+                  ref={companyRef}
+                  defaultValue={company}
+                  placeholder="Acme Corp"
+                  autoComplete="organization"
+                  style={{ background: "#111", border: "1.5px solid #333", color: "#fff", borderRadius: 9, padding: "13px 14px", fontFamily: "DM Sans, sans-serif", fontSize: "1rem", outline: "none", width: "100%" }}
+                />
               </div>
             </div>
-          )}
-          <div className="time-badge">⏱ Takes about 5 minutes</div>
-          <div className="client-step">About You</div>
-          <div className="client-title">Share your experience</div>
-          <div className="client-sub">
-            {campaign?.companyName ? `${campaign.companyName} would love to hear from you.` : "We'd love to hear about your experience."} It only takes a few minutes.
+            <button className="btn btn-gold" style={{ width: "100%", justifyContent: "center", fontSize: "1rem", padding: "14px 24px" }}
+              onClick={handleNameContinue}>
+              Continue →
+            </button>
           </div>
-          <div className="field" style={{ marginBottom: 14 }}>
-            <label style={{ color: "#888" }}>Your Name</label>
-            <input style={{ background: "#111", border: "1.5px solid #333", color: "#fff", borderRadius: 9, padding: "11px 14px", fontFamily: "DM Sans, sans-serif" }}
-              value={name} onChange={e => setName(e.target.value)} placeholder="Jane Smith" />
-          </div>
-          <div className="field" style={{ marginBottom: 24 }}>
-            <label style={{ color: "#888" }}>Company (optional)</label>
-            <input style={{ background: "#111", border: "1.5px solid #333", color: "#fff", borderRadius: 9, padding: "11px 14px", fontFamily: "DM Sans, sans-serif" }}
-              value={company} onChange={e => setCompany(e.target.value)} placeholder="Acme Corp" />
-          </div>
-          <button className="btn btn-gold" style={{ width: "100%", justifyContent: "center" }}
-            disabled={!name} onClick={() => { setCamTestChecks([false,false,false]); setStep(1); }}>
-            Let's go →
-          </button>
-        </CardPage>
+        </div>
       )}
 
-      {/* ── Page 1: Camera test ── */}
+      {/* ── Step 1: Camera test ───────────────────────────────────────────── */}
       {step === 1 && (
-        <CardPage pageKey="camtest">
-          <div className="client-step">Camera Check</div>
-          <div className="client-title" style={{ marginBottom: 6 }}>Test your setup</div>
-          <div className="client-sub" style={{ marginBottom: 20 }}>Make sure you're well lit and in a quiet spot.</div>
-          <div className="video-area" style={{ marginBottom: 20 }}>
-            <video ref={camTestVideoRef} playsInline muted
-              style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 14 }} />
+        <div style={centeredStep}>
+          {previewBar}
+          <div className="client-logo">✦ Vouch</div>
+          <div className="client-card">
+            <button className="btn btn-outline btn-sm" style={{ color: "#666", borderColor: "#333", marginBottom: 20 }}
+              onClick={() => setStep(0)}>← Back</button>
+            <div className="client-step">Camera Check</div>
+            <div className="client-title" style={{ marginBottom: 8 }}>Test your setup</div>
+            <div className="client-sub" style={{ marginBottom: 20 }}>
+              Make sure you're well lit and in a quiet place before we start.
+            </div>
+            <div style={{ borderRadius: 14, overflow: "hidden", background: "#111", aspectRatio: "16/9", marginBottom: 20 }}>
+              <video ref={camTestVideoRef} playsInline muted
+                style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+            </div>
+            <div className="cam-checklist" style={{ marginBottom: 24 }}>
+              {["I can see myself clearly", "I'm in a quiet place", "I'm ready to start"].map((label, i) => (
+                <label key={i} className={`cam-check-item${camTestChecks[i] ? " checked" : ""}`}>
+                  <input type="checkbox" checked={camTestChecks[i]}
+                    onChange={e => setCamTestChecks(prev => prev.map((v, j) => j === i ? e.target.checked : v))} />
+                  <span className="cam-check-box">{camTestChecks[i] ? "✓" : ""}</span>
+                  <span className="cam-check-label">{label}</span>
+                </label>
+              ))}
+            </div>
+            <button className="btn btn-gold"
+              style={{ width: "100%", justifyContent: "center", fontSize: "1rem", padding: "14px 24px", opacity: camTestChecks.every(Boolean) ? 1 : 0.45 }}
+              disabled={!camTestChecks.every(Boolean)}
+              onClick={() => setStep(2)}>
+              {camTestChecks.every(Boolean) ? "Begin recording →" : "Tick all three to continue"}
+            </button>
           </div>
-          <div className="cam-checklist">
-            {["I can see myself clearly", "I'm in a quiet place", "I'm ready to start"].map((label, i) => (
-              <label key={i} className={`cam-check-item ${camTestChecks[i] ? "checked" : ""}`}>
-                <input type="checkbox" checked={camTestChecks[i]}
-                  onChange={e => setCamTestChecks(prev => prev.map((v, j) => j === i ? e.target.checked : v))} />
-                <span className="cam-check-box">{camTestChecks[i] ? "✓" : ""}</span>
-                <span className="cam-check-label">{label}</span>
-              </label>
-            ))}
-          </div>
-          <button className="btn btn-gold" style={{ width: "100%", justifyContent: "center", marginTop: 24, opacity: camTestChecks.every(Boolean) ? 1 : 0.5 }}
-            disabled={!camTestChecks.every(Boolean)}
-            onClick={() => setStep(2)}>
-            {camTestChecks.every(Boolean) ? "I'm ready — start recording →" : "Tick all three to continue"}
-          </button>
-        </CardPage>
+        </div>
       )}
 
-      {/* ── Pages 2..N+1: Full-screen question pages ── */}
+      {/* ── Steps 2..N+1: Full-screen question pages ──────────────────────── */}
+      {/* key={step} forces remount between questions, triggering the slide animation */}
       {isQuestion && (
-        <div key={`q${step}`} className="cp-question-page cp-slide" style={onBack ? { paddingTop: 52 } : {}}>
+        <div key={step} className="cp-question-page cp-slide">
 
-          {/* Preview bar on question pages */}
-          {onBack && (
-            <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 200, background: "rgba(10,10,10,0.92)", backdropFilter: "blur(8px)", borderBottom: "1px solid #222", padding: "10px 20px", display: "flex", alignItems: "center", gap: 16 }}>
-              <button className="btn btn-outline btn-sm" style={{ color: "#aaa", borderColor: "#444" }} onClick={onBack}>← Dashboard</button>
-              <span style={{ fontSize: "0.78rem", color: "#555" }}>Preview mode</span>
-            </div>
-          )}
+          {/* Preview bar inside the fixed overlay */}
+          {previewBar}
 
-          {/* Top bar */}
-          <div className="cp-topbar">
+          {/* Top bar: back button + "Question N of M" */}
+          <div className="cp-topbar" style={{ paddingTop: topPad ? topPad + 14 : 14 }}>
+            <button
+              style={{ position: "absolute", left: 20, background: "none", border: "none", color: "#666", cursor: "pointer", fontSize: "0.85rem", padding: "4px 0", fontFamily: "DM Sans, sans-serif" }}
+              onClick={() => setStep(s => s - 1)}>
+              ← Back
+            </button>
             <div className="cp-progress-pill">
               <span style={{ color: "var(--gold)", fontWeight: 700 }}>Question {qIdx + 1}</span>
               <span style={{ color: "#555" }}> of {prompts.length}</span>
@@ -1686,45 +1719,43 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
             <div className="cp-progress-bar-fill" style={{ width: `${((qIdx + 1) / prompts.length) * 100}%` }} />
           </div>
 
-          {/* Question + talking points */}
+          {/* Question text + talking points */}
           <div className="cp-q-header">
             <div className="cp-q-label">
-              {recordPhase === "idle" && !isRerecording && "Read the question, then tap record"}
-              {recordPhase === "idle" && isRerecording && "Take your time — record again when ready"}
               {countdown !== null && "Get ready to speak…"}
               {recordPhase === "recording" && "Recording — speak naturally"}
               {recordPhase === "reviewing" && "Watch your answer, then decide"}
+              {recordPhase === "idle" && countdown === null && (isRerecording ? "Take your time — record again when ready" : "Read the question, then tap record")}
             </div>
             <div className="cp-q-text">{prompts[qIdx]}</div>
 
             {recordPhase !== "recording" && countdown === null && (
               talkingPoints[qIdx] ? (
-                <ul className="q-hints" style={{ marginBottom: 4 }}>
+                <ul className="q-hints">
                   {talkingPoints[qIdx].map((pt, i) => (
                     <li key={i} className="q-hint"><span className="q-hint-bullet">•</span>{pt}</li>
                   ))}
                 </ul>
               ) : talkingPoints[qIdx] === undefined ? (
                 <div className="q-hints-skeleton">
-                  {[65, 80, 50].map((w, i) => <div key={i} className="q-hints-skeleton-line" style={{ width: `${w}%` }} />)}
+                  {[70, 85, 55].map((w, i) => <div key={i} className="q-hints-skeleton-line" style={{ width: `${w}%` }} />)}
                 </div>
               ) : null
             )}
           </div>
 
-          {/* Camera — flex:1, fills remaining space */}
+          {/* Camera — flex:1 fills remaining viewport height */}
           <div className="cp-camera-wrap">
-            {/* Live feed or playback */}
             {(liveStream || videoURLs[qIdx]) ? (
               <video
-                key={`${step}-${recordPhase}`}
+                key={`vid-${step}-${recordPhase}`}
                 ref={videoRef}
                 playsInline
                 autoPlay={recordPhase !== "reviewing"}
                 muted={recordPhase !== "reviewing"}
                 controls={recordPhase === "reviewing"}
                 style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                src={recordPhase !== "recording" ? (videoURLs[qIdx] || "") : undefined}
+                src={recordPhase === "reviewing" ? (videoURLs[qIdx] || "") : undefined}
               />
             ) : (
               <div className="cp-camera-placeholder">
@@ -1736,14 +1767,15 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
               </div>
             )}
 
-            {/* 3-2-1 countdown */}
+            {/* 3-2-1 countdown overlay */}
             {countdown !== null && (
               <div className="q-countdown-overlay">
-                <div key={countdown} className="q-countdown-num">{countdown || "Go!"}</div>
+                <div key={countdown} className="q-countdown-num">{countdown === 0 ? "Go!" : countdown}</div>
+                <div className="q-countdown-label">GET READY</div>
               </div>
             )}
 
-            {/* Question overlay during recording */}
+            {/* Question text at bottom of video during recording */}
             {recordPhase === "recording" && (
               <div className="q-video-overlay">
                 <div className="q-video-overlay-text">{prompts[qIdx]}</div>
@@ -1758,6 +1790,7 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
 
           {/* Bottom controls */}
           <div className="cp-bottom">
+
             {/* Idle: big record button */}
             {recordPhase === "idle" && countdown === null && cameraAvailable !== false && (
               <div className="cp-record-row">
@@ -1771,21 +1804,25 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
               </div>
             )}
 
-            {/* Recording: timer + stop */}
+            {/* Recording: timer + stop button */}
             {recordPhase === "recording" && (
               <div className="cp-recording-row">
                 <div className="rec-indicator"><div className="rec-dot" /> Live</div>
-                <span className={`rec-timer${recSecs >= 90 ? " warn" : ""}`}>{fmtSecs(recSecs)}</span>
-                <button className="btn" style={{ background: "#1e1e1e", color: "#fff", border: "1px solid #333", padding: "10px 22px", borderRadius: 10 }} onClick={stopRecording}>⏹ Stop</button>
+                <div style={{ textAlign: "center" }}>
+                  <div className={`rec-timer${recSecs >= 90 ? " warn" : ""}`}>{fmtSecs(recSecs)}</div>
+                  <div className="rec-aim">Aim for 30–60 seconds</div>
+                </div>
+                <button className="btn" style={{ background: "#1e1e1e", color: "#fff", border: "1px solid #333", padding: "10px 20px", borderRadius: 10 }}
+                  onClick={stopRecording}>⏹ Stop</button>
               </div>
             )}
 
-            {/* Review: re-record or advance */}
+            {/* Reviewing: re-record or advance */}
             {recordPhase === "reviewing" && (
-              <div className="q-review-actions" style={{ marginBottom: 10 }}>
+              <div className="q-review-actions">
                 <button className="btn btn-outline" style={{ color: "#aaa", borderColor: "#333" }} onClick={reRecord}>↩ Re-record</button>
                 <button className="btn btn-gold" onClick={advanceQuestion}>
-                  {qIdx >= prompts.length - 1 ? "Looks good, finish →" : `Looks good, Q${qIdx + 2} →`}
+                  {qIdx >= prompts.length - 1 ? "Looks good →" : "Next question →"}
                 </button>
               </div>
             )}
@@ -1793,7 +1830,7 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
             {/* Text fallback */}
             {recordPhase !== "recording" && countdown === null && (
               <>
-                <div className="q-or-divider" style={{ margin: "10px 0 10px" }}>
+                <div className="q-or-divider" style={{ margin: "12px 0 10px" }}>
                   {cameraAvailable === false ? "Type your answer" : "or type your answer"}
                 </div>
                 <textarea
@@ -1802,8 +1839,9 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
                   value={answers[qIdx] || ""}
                   onChange={e => setAnswers(prev => ({ ...prev, [qIdx]: e.target.value }))}
                 />
-                {answers[qIdx] && !videoURLs[qIdx] && recordPhase !== "reviewing" && (
-                  <button className="btn btn-gold" style={{ width: "100%", justifyContent: "center", marginTop: 10 }} onClick={advanceQuestion}>
+                {answers[qIdx] && recordPhase !== "reviewing" && (
+                  <button className="btn btn-gold" style={{ width: "100%", justifyContent: "center", marginTop: 10 }}
+                    onClick={advanceQuestion}>
                     {qIdx >= prompts.length - 1 ? "Continue to rating →" : "Next question →"}
                   </button>
                 )}
@@ -1813,73 +1851,94 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
         </div>
       )}
 
-      {/* ── Rating ── */}
+      {/* ── Step N+2: Star rating ─────────────────────────────────────────── */}
       {step === ratingStep && (
-        <CardPage pageKey="rating">
-          <div className="client-step">Final Step</div>
-          <div className="client-title" style={{ textAlign: "center" }}>How would you rate your experience?</div>
-          <div className="client-sub" style={{ textAlign: "center", marginBottom: 28 }}>Your honest feedback means a lot.</div>
-          <StarRating value={rating} onChange={setRating} />
-          {submitting ? (
-            <div>
-              {submitPhase === "uploading" && Object.keys(videoBlobs).length > 0 && (
-                <div className="upload-progress">
-                  <div style={{ color: "#888", fontSize: "0.78rem", marginBottom: 12, textAlign: "center", textTransform: "uppercase", letterSpacing: "0.06em" }}>Uploading videos…</div>
-                  {Object.keys(videoBlobs).map(idx => (
-                    <div key={idx} className="upload-row">
-                      <div className="upload-label">Q{Number(idx)+1}</div>
-                      <div className="progress-track"><div className="progress-fill" style={{ width: `${uploadProgress[idx]||0}%` }} /></div>
-                      <div className="progress-pct">{uploadProgress[idx]||0}%</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {submitPhase === "analyzing" && (
-                <div className="ai-generating" style={{ justifyContent: "center", color: "#888" }}>
-                  <div className="ai-spinner" style={{ borderTopColor: "var(--gold)", borderColor: "#333" }} />
-                  Crafting your testimonial…
-                </div>
-              )}
+        <div style={centeredStep}>
+          {previewBar}
+          <div className="client-logo">✦ Vouch</div>
+          <div className="client-card">
+            <button className="btn btn-outline btn-sm" style={{ color: "#666", borderColor: "#333", marginBottom: 20 }}
+              onClick={() => setStep(prompts.length + 1)}>← Back</button>
+            <div className="client-step">Final Step</div>
+            <div className="client-title" style={{ textAlign: "center", marginBottom: 8 }}>How was your experience?</div>
+            <div className="client-sub" style={{ textAlign: "center", marginBottom: 28 }}>
+              Your honest rating helps others make great decisions.
             </div>
-          ) : (
-            <button className="btn btn-gold" style={{ width: "100%", justifyContent: "center", marginTop: 8 }}
-              disabled={!rating} onClick={handleSubmit}>
-              Submit Testimonial ✦
-            </button>
-          )}
-        </CardPage>
+            <StarRating value={rating} onChange={setRating} />
+            {submitting ? (
+              <div style={{ textAlign: "center", padding: "20px 0" }}>
+                {submitPhase === "uploading" && Object.keys(videoBlobs).length > 0 && (
+                  <div className="upload-progress">
+                    <div style={{ color: "#888", fontSize: "0.78rem", marginBottom: 12, textAlign: "center", textTransform: "uppercase", letterSpacing: "0.06em" }}>Uploading videos…</div>
+                    {Object.keys(videoBlobs).map(idx => (
+                      <div key={idx} className="upload-row">
+                        <div className="upload-label">Q{Number(idx) + 1}</div>
+                        <div className="progress-track"><div className="progress-fill" style={{ width: `${uploadProgress[idx] || 0}%` }} /></div>
+                        <div className="progress-pct">{uploadProgress[idx] || 0}%</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {submitPhase === "analyzing" && (
+                  <div className="ai-generating" style={{ justifyContent: "center", color: "#888" }}>
+                    <div className="ai-spinner" style={{ borderTopColor: "var(--gold)", borderColor: "#333" }} />
+                    Crafting your testimonial…
+                  </div>
+                )}
+              </div>
+            ) : (
+              <button className="btn btn-gold"
+                style={{ width: "100%", justifyContent: "center", marginTop: 8, fontSize: "1rem", padding: "14px 24px" }}
+                disabled={!rating}
+                onClick={handleSubmit}>
+                Submit Testimonial ✦
+              </button>
+            )}
+          </div>
+        </div>
       )}
 
-      {/* ── Done ── */}
+      {/* ── Step N+3: Success ─────────────────────────────────────────────── */}
       {step === doneStep && (
-        <CardPage pageKey="done">
-          <div className="success-screen">
-            <div className="success-icon">🌟</div>
-            <div className="success-title">Thank you, {name}!</div>
-            <div className="success-sub" style={{ marginBottom: 24 }}>Your testimonial has been submitted and is being reviewed.</div>
+        <div style={centeredStep}>
+          {previewBar}
+          <div className="client-logo">✦ Vouch</div>
+          <div className="client-card" style={{ textAlign: "center" }}>
+            <div style={{ fontSize: "3rem", marginBottom: 16 }}>🌟</div>
+            <div className="client-title">Thank you, {name || "friend"}!</div>
+            <div className="client-sub" style={{ marginBottom: 24 }}>
+              Your testimonial has been submitted and is being reviewed.
+            </div>
             {generatedQuote && (
-              <div style={{ background: "#111", border: "1px solid #2a2a2a", borderRadius: 12, padding: 20, textAlign: "left", marginBottom: 20 }}>
-                <div style={{ color: "#888", fontSize: "0.78rem", marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.06em" }}>Your testimonial preview</div>
+              <div style={{ background: "#111", border: "1px solid #2a2a2a", borderRadius: 12, padding: 20, textAlign: "left", marginBottom: 24 }}>
+                <div style={{ color: "#666", fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>Your testimonial preview</div>
                 <div style={{ fontFamily: "Instrument Serif, serif", fontSize: "1.05rem", fontStyle: "italic", color: "#ddd", lineHeight: 1.6 }}>"{generatedQuote}"</div>
               </div>
             )}
             <div className="whats-next">
               <div className="whats-next-title">What happens now?</div>
               <div className="whats-next-steps">
-                {["We review your testimonial", "We produce a polished video",
-                  `${campaign?.companyName||"They"} will share it — and you might be famous! 😄`
+                {[
+                  "We review your testimonial",
+                  "We produce a polished video",
+                  `${campaign?.companyName || "Your story"} gets shared — and you might be famous!`,
                 ].map((text, i) => (
                   <div key={i} className="whats-next-step">
-                    <div className="whats-next-num">{i+1}</div>
+                    <div className="whats-next-num">{i + 1}</div>
                     <div className="whats-next-text">{text}</div>
                   </div>
                 ))}
               </div>
             </div>
-            {onBack && <button className="btn btn-outline" style={{ color: "#888", borderColor: "#333", marginTop: 20 }} onClick={onBack}>← Back to app</button>}
+            {onBack && (
+              <button className="btn btn-outline" style={{ color: "#666", borderColor: "#333", marginTop: 24 }} onClick={onBack}>
+                ← Back to app
+              </button>
+            )}
           </div>
-        </CardPage>
+        </div>
       )}
+
     </div>
   );
 }
