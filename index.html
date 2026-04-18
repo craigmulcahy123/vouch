@@ -105,6 +105,7 @@ function initFirebase() {
     _auth = firebase.auth();
     _storage = firebase.storage();
     _db = firebase.firestore();
+    window._firebaseAuth = _auth; // exposed for diagnostic logging only
     _fbReady = true;
     _fbCallbacks.forEach(cb => cb(_auth, _storage, _db));
     _fbCallbacks = [];
@@ -1613,6 +1614,20 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
 
   async function handleSubmit() {
     setSubmitting(true);
+
+    // ── DIAGNOSTIC LOGGING ──────────────────────────────────────────────────
+    console.group("[vouch] handleSubmit");
+    console.log("campaign.id     :", campaign?.id);
+    console.log("campaign.ownerId:", campaign?.ownerId);
+    console.log("ownerId (derived):", ownerId);
+    console.log("userId (prop)   :", userId);
+    console.log("db available    :", !!db);
+    console.log("auth.currentUser:", window._firebaseAuth?.currentUser?.uid, "(anon:", window._firebaseAuth?.currentUser?.isAnonymous, ")");
+    console.log("rating          :", rating);
+    console.log("answers         :", answers);
+    console.groupEnd();
+    // ────────────────────────────────────────────────────────────────────────
+
     const hasVideos = Object.keys(videoBlobs).length > 0;
     let firebaseURLs = {};
     const storageUserId = ownerId || userId;
@@ -1625,33 +1640,40 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
           videoBlobs,
           onProgress: (idx, pct) => setUploadProgress(prev => ({ ...prev, [idx]: pct })),
         });
-      } catch (e) { console.error("Upload failed:", e); }
+      } catch (e) { console.error("[vouch] video upload failed:", e); }
     }
     setSubmitPhase("analyzing");
     const quote = await analyzeTestimonial(answers, prompts);
     setGeneratedQuote(quote);
     if (db && ownerId) {
       const tid = Date.now().toString();
+      const fsPath = `users/${ownerId}/testimonials/${tid}`;
+      const testimonialData = {
+        id: tid, clientName: name, clientCompany: company, rating, answers,
+        videoURLs: firebaseURLs, quote,
+        campaignId: campaign.id, campaignName: campaign.name || "",
+        status: "new", createdAt: Date.now(), inviteId: inviteId || null,
+      };
+      console.log("[vouch] writing testimonial to Firestore path:", fsPath);
+      console.log("[vouch] testimonial data:", testimonialData);
       try {
-        await db.collection("users").doc(ownerId).collection("testimonials").doc(tid).set({
-          id: tid, clientName: name, clientCompany: company, rating, answers,
-          videoURLs: firebaseURLs, quote,
-          campaignId: campaign.id, campaignName: campaign.name || "",
-          status: "new", createdAt: Date.now(), inviteId: inviteId || null,
-        });
-        console.log("[testimonial] saved:", tid, "→ users/" + ownerId + "/testimonials");
+        await db.collection("users").doc(ownerId).collection("testimonials").doc(tid).set(testimonialData);
+        console.log("[vouch] ✅ testimonial write SUCCESS →", fsPath);
       } catch (e) {
-        // If this fails with "permission-denied", your Firestore security rules need:
-        // match /users/{uid}/testimonials/{tid} { allow write: if request.auth != null; }
-        console.error("[testimonial] Firestore write failed:", e.code, e.message);
+        console.error("[vouch] ❌ testimonial write FAILED");
+        console.error("  error.code   :", e.code);
+        console.error("  error.message:", e.message);
+        console.error("  If code is 'permission-denied', update Firestore security rules:");
+        console.error("  match /users/{uid}/testimonials/{tid} { allow write: if request.auth != null; }");
       }
     } else {
-      console.warn("[testimonial] skipped Firestore write — db:", !!db, "ownerId:", ownerId);
+      console.warn("[vouch] ⚠ testimonial write SKIPPED — db:", !!db, "| ownerId:", ownerId);
+      if (!ownerId) console.warn("  → campaign.ownerId is missing. Campaign object:", campaign);
     }
     if (inviteId && ownerId && db) {
       db.collection("users").doc(ownerId).collection("invites").doc(inviteId)
         .update({ status: "recorded", recordedAt: Date.now() })
-        .catch(e => console.warn("[invite] status update failed:", e.code));
+        .catch(e => console.warn("[vouch] invite status update failed:", e.code));
     }
     if (lsKey) try { localStorage.removeItem(lsKey); } catch {}
     setSubmitting(false);
@@ -2664,23 +2686,41 @@ function Dashboard({ onPreview, userId, db, onUpgrade }) {
 
   useEffect(() => {
     if (!db || !userId) return;
+
+    // ── DIAGNOSTIC LOGGING ────────────────────────────────────────────────
+    console.group("[vouch] Dashboard Firestore listeners starting");
+    console.log("userId (dashboard owner):", userId);
+    console.log("listening to: users/" + userId + "/campaigns");
+    console.log("listening to: users/" + userId + "/testimonials");
+    console.log("listening to: users/" + userId + "/invites");
+    console.groupEnd();
+    // ──────────────────────────────────────────────────────────────────────
+
     const unsubCampaigns = db.collection("users").doc(userId).collection("campaigns")
       .orderBy("createdAt", "desc")
       .onSnapshot(
-        snap => { setDbError(null); setCampaigns(snap.docs.map(d => d.data())); },
-        err => { console.error("[campaigns] Firestore error:", err); setDbError(err.message); }
+        snap => {
+          setDbError(null);
+          setCampaigns(snap.docs.map(d => d.data()));
+        },
+        err => { console.error("[vouch] campaigns listener error:", err.code, err.message); setDbError(err.message); }
       );
     const unsubTestimonials = db.collection("users").doc(userId).collection("testimonials")
       .orderBy("createdAt", "desc")
       .onSnapshot(
-        snap => setTestimonials(snap.docs.map(d => d.data())),
-        err => console.error("[testimonials] Firestore error:", err)
+        snap => {
+          console.log("[vouch] testimonials snapshot — count:", snap.docs.length,
+            "| path: users/" + userId + "/testimonials",
+            "| docs:", snap.docs.map(d => d.id));
+          setTestimonials(snap.docs.map(d => d.data()));
+        },
+        err => console.error("[vouch] testimonials listener error:", err.code, err.message)
       );
     const unsubInvites = db.collection("users").doc(userId).collection("invites")
       .orderBy("invitedAt", "desc")
       .onSnapshot(
         snap => setInvites(snap.docs.map(d => d.data())),
-        err => console.error("[invites] Firestore error:", err)
+        err => console.error("[vouch] invites listener error:", err.code, err.message)
       );
     return () => { unsubCampaigns(); unsubTestimonials(); unsubInvites(); };
   }, [db, userId]);
@@ -3531,12 +3571,14 @@ function App() {
     if (!recordCampaignId || !auth) return;
     const currentUser = auth.currentUser;
     if (currentUser) {
-      // Already signed in (e.g. business owner previewing their own link)
+      console.log("[vouch/record] auth: already signed in as", currentUser.uid, "(anon:", currentUser.isAnonymous, ")");
       setAnonAuthReady(true);
       return;
     }
+    console.log("[vouch/record] signing in anonymously…");
     auth.signInAnonymously()
-      .catch(e => console.warn("[record] anonymous auth failed:", e.code, "— Firestore reads may be blocked by security rules"))
+      .then(cred => console.log("[vouch/record] ✅ anonymous auth success, uid:", cred.user.uid))
+      .catch(e => console.warn("[vouch/record] ❌ anonymous auth failed:", e.code, e.message))
       .finally(() => setAnonAuthReady(true));
   }, [recordCampaignId, auth]);
 
@@ -3544,39 +3586,53 @@ function App() {
   useEffect(() => {
     if (!recordCampaignId || !db || !anonAuthReady) return;
     const ownerParam = new URLSearchParams(window.location.search).get("owner");
+    console.log("[vouch/record] loading campaign:", recordCampaignId, "| ?owner=", ownerParam);
 
     function loadViaCollectionGroup() {
-      // Requires a collection-group index on campaigns.id in Firestore console.
-      // See firestore.indexes.json at project root.
+      console.log("[vouch/record] trying collectionGroup query on campaigns.id ==", recordCampaignId);
       return db.collectionGroup("campaigns")
         .where("id", "==", recordCampaignId)
         .limit(1)
         .get()
         .then(snap => {
+          console.log("[vouch/record] collectionGroup result — empty:", snap.empty);
           if (snap.empty) { setRecordCampaign(null); return; }
           const doc = snap.docs[0];
           const data = doc.data();
           const pathOwnerId = doc.ref.parent?.parent?.id;
-          setRecordCampaign({ ...data, ownerId: data.ownerId || pathOwnerId || null });
+          const resolved = { ...data, ownerId: data.ownerId || pathOwnerId || null };
+          console.log("[vouch/record] ✅ campaign loaded via collectionGroup:", resolved.id, "| ownerId:", resolved.ownerId, "| prompts:", resolved.prompts?.length);
+          setRecordCampaign(resolved);
         });
     }
 
     if (ownerParam) {
-      // Primary path: direct document read — no index required, fastest.
+      console.log("[vouch/record] trying direct path: users/" + ownerParam + "/campaigns/" + recordCampaignId);
       db.collection("users").doc(ownerParam).collection("campaigns").doc(recordCampaignId)
         .get()
         .then(doc => {
+          console.log("[vouch/record] direct path result — exists:", doc.exists);
           if (doc.exists) {
-            setRecordCampaign({ ...doc.data(), ownerId: ownerParam });
+            const resolved = { ...doc.data(), ownerId: ownerParam };
+            console.log("[vouch/record] ✅ campaign loaded via direct path | prompts:", resolved.prompts?.length);
+            setRecordCampaign(resolved);
           } else {
-            // Doc not found at that owner path — fall back to collection group search
+            console.log("[vouch/record] direct path missed — falling back to collectionGroup");
             return loadViaCollectionGroup();
           }
         })
-        .catch(() => loadViaCollectionGroup().catch(() => setRecordCampaign(null)));
+        .catch(e => {
+          console.warn("[vouch/record] direct path error:", e.code, e.message, "— falling back to collectionGroup");
+          return loadViaCollectionGroup().catch(e2 => {
+            console.error("[vouch/record] ❌ collectionGroup fallback also failed:", e2.code, e2.message);
+            setRecordCampaign(null);
+          });
+        });
     } else {
-      // No owner param — use collection group query (old-style links)
-      loadViaCollectionGroup().catch(() => setRecordCampaign(null));
+      loadViaCollectionGroup().catch(e => {
+        console.error("[vouch/record] ❌ collectionGroup failed:", e.code, e.message);
+        setRecordCampaign(null);
+      });
     }
   }, [recordCampaignId, db, anonAuthReady]);
 
