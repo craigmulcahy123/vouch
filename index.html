@@ -1230,8 +1230,7 @@ function InviteModal({ campaign, db, userId, onClose }) {
   const [errorMsg, setErrorMsg] = useState("");
   const [showPreview, setShowPreview] = useState(false);
 
-  const ownerSuffix = (campaign.ownerId || userId) ? `?owner=${campaign.ownerId || userId}` : "";
-  const recordingLink = `${window.location.origin}/record/${campaign.id}${ownerSuffix}`;
+  const recordingLink = `https://vouchbusiness.com/record/${campaign.id}?owner=${campaign.ownerId || userId}`;
 
   async function handleSend() {
     if (!clientName || !toEmail) return;
@@ -2769,7 +2768,7 @@ function Dashboard({ onPreview, userId, db, onUpgrade }) {
   }
 
   function copyLink(campaignId) {
-    const url = `${window.location.origin}/record/${campaignId}?owner=${userId}`;
+    const url = `https://vouchbusiness.com/record/${campaignId}?owner=${userId}`;
     navigator.clipboard.writeText(url).catch(() => {});
     setCopiedId(campaignId);
     setTimeout(() => setCopiedId(null), 2000);
@@ -2987,7 +2986,7 @@ function Dashboard({ onPreview, userId, db, onUpgrade }) {
                 </div>
                 <div style={{ color: "var(--muted)", fontSize: "0.8rem", marginBottom: 10 }}>{c.prompts.length} questions</div>
                 <div className="link-box">
-                  <span className="link-url">vouchbusiness.com/record/{c.id}</span>
+                  <span className="link-url">vouchbusiness.com/record/{c.id}?owner={userId}</span>
                 </div>
               </div>
             ))}
