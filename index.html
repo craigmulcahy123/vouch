@@ -4,6 +4,44 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Vouch — Video Testimonials</title>
+  <script>
+    // Generate favicon + apple-touch-icon from canvas so no external files are needed
+    (function () {
+      var size = 192;
+      var c = document.createElement("canvas");
+      c.width = c.height = size;
+      var ctx = c.getContext("2d");
+      // Rounded dark background
+      var r = size * 0.18;
+      ctx.fillStyle = "#0e0e0e";
+      ctx.beginPath();
+      ctx.moveTo(r, 0); ctx.lineTo(size - r, 0);
+      ctx.quadraticCurveTo(size, 0, size, r);
+      ctx.lineTo(size, size - r);
+      ctx.quadraticCurveTo(size, size, size - r, size);
+      ctx.lineTo(r, size);
+      ctx.quadraticCurveTo(0, size, 0, size - r);
+      ctx.lineTo(0, r);
+      ctx.quadraticCurveTo(0, 0, r, 0);
+      ctx.closePath();
+      ctx.fill();
+      // Gold italic V
+      ctx.fillStyle = "#c8a96e";
+      ctx.font = "italic bold " + Math.round(size * 0.68) + "px Georgia, serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("V", size / 2, size * 0.53);
+      var png = c.toDataURL("image/png");
+      // Favicon (browser tab)
+      var favicon = document.createElement("link");
+      favicon.rel = "icon"; favicon.type = "image/png"; favicon.href = png;
+      document.head.appendChild(favicon);
+      // Apple touch icon (iPhone home screen)
+      var apple = document.createElement("link");
+      apple.rel = "apple-touch-icon"; apple.href = png;
+      document.head.appendChild(apple);
+    })();
+  </script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone@7.23.4/babel.min.js"></script>
@@ -1614,7 +1652,7 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
       {step === 0 && (
         <div style={centeredStep}>
           {previewBar}
-          <div className="client-logo">✦ Vouch</div>
+          <button className="client-logo" style={{ background: "none", border: "none", cursor: onBack ? "pointer" : "default" }} onClick={onBack || undefined}>✦ Vouch</button>
           <div className="client-card">
             {showResumeBanner && (
               <div className="resume-banner">
@@ -1674,7 +1712,7 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
       {step === 1 && (
         <div style={centeredStep}>
           {previewBar}
-          <div className="client-logo">✦ Vouch</div>
+          <button className="client-logo" style={{ background: "none", border: "none", cursor: onBack ? "pointer" : "default" }} onClick={onBack || undefined}>✦ Vouch</button>
           <div className="client-card">
             <button className="btn btn-outline btn-sm" style={{ color: "#666", borderColor: "#333", marginBottom: 20 }}
               onClick={() => setStep(0)}>← Back</button>
@@ -1869,7 +1907,7 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
       {step === ratingStep && (
         <div style={centeredStep}>
           {previewBar}
-          <div className="client-logo">✦ Vouch</div>
+          <button className="client-logo" style={{ background: "none", border: "none", cursor: onBack ? "pointer" : "default" }} onClick={onBack || undefined}>✦ Vouch</button>
           <div className="client-card">
             <button className="btn btn-outline btn-sm" style={{ color: "#666", borderColor: "#333", marginBottom: 20 }}
               onClick={() => setStep(prompts.length + 1)}>← Back</button>
@@ -1916,7 +1954,7 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
       {step === doneStep && (
         <div style={centeredStep}>
           {previewBar}
-          <div className="client-logo">✦ Vouch</div>
+          <button className="client-logo" style={{ background: "none", border: "none", cursor: onBack ? "pointer" : "default" }} onClick={onBack || undefined}>✦ Vouch</button>
           <div className="client-card" style={{ textAlign: "center" }}>
             <div style={{ fontSize: "3rem", marginBottom: 16 }}>🌟</div>
             <div className="client-title">Thank you, {name || "friend"}!</div>
@@ -3415,7 +3453,7 @@ function App() {
         ) : (
           <>
             <nav className="nav">
-              <div className="nav-logo serif">Vouch<span>✦</span></div>
+              <button className="nav-logo serif" style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }} onClick={() => setView("dashboard")}>Vouch<span>✦</span></button>
               <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
                 <div className="nav-tabs">
                   <button className={`nav-tab ${view === "dashboard" ? "active" : ""}`} onClick={() => setView("dashboard")}>Dashboard</button>
