@@ -1235,31 +1235,45 @@ function InviteModal({ campaign, db, userId, onClose }) {
     if (!clientName || !toEmail) return;
     setStatus("sending");
     const inviteId = Date.now().toString();
-    try {
-      await sendInviteEmail({ toEmail, clientName, campaign, inviteId });
-      // Save invite record to Firestore
-      if (db && userId) {
+    const now = Date.now();
+
+    // 1. Write invite to Firestore FIRST — this is the source of truth for the pipeline.
+    //    If email delivery fails the record still exists and the owner can resend.
+    if (db && userId) {
+      try {
         await db.collection("users").doc(userId).collection("invites").doc(inviteId).set({
           id: inviteId,
           clientName,
+          clientEmail: toEmail,
           toEmail,
           campaignId: campaign.id,
           campaignName: campaign.name || "",
           companyName: campaign.companyName || "",
           ownerId: userId,
           status: "invited",
-          invitedAt: Date.now(),
+          sentAt: now,
+          invitedAt: now,
           openedAt: null,
           recordedAt: null,
           approvedAt: null,
           deliveredAt: null,
           planValue: 497,
         });
+      } catch (e) {
+        setErrorMsg("Failed to save invite: " + e.message);
+        setStatus("error");
+        return;
       }
+    }
+
+    // 2. Send the email
+    try {
+      await sendInviteEmail({ toEmail, clientName, campaign, inviteId });
       setStatus("success");
     } catch (e) {
+      // Invite is saved in Firestore — owner can resend from the pipeline.
       setErrorMsg(e.message);
-      setStatus("error");
+      setStatus("email_error");
     }
   }
 
@@ -1316,7 +1330,12 @@ function InviteModal({ campaign, db, userId, onClose }) {
         )}
 
         {status === "success" && (
-          <div className="send-status success">✓ Email sent to {toEmail}!</div>
+          <div className="send-status success">✓ Invite saved and email sent to {toEmail}!</div>
+        )}
+        {status === "email_error" && (
+          <div className="send-status" style={{ background: "#fef9e7", border: "1px solid #f0d060", borderRadius: 10, padding: "12px 16px", color: "#7a6010", fontSize: "0.85rem", marginTop: 16 }}>
+            ⚠ Invite saved to pipeline, but email delivery failed ({errorMsg}). You can resend from the Invites tab.
+          </div>
         )}
         {status === "error" && (
           <div className="send-status error">✕ {errorMsg}</div>
@@ -1325,9 +1344,9 @@ function InviteModal({ campaign, db, userId, onClose }) {
         <div className="modal-footer">
           <button className="btn btn-outline" onClick={onClose}>Cancel</button>
           <button className="btn btn-primary"
-            disabled={!clientName || !toEmail || status === "sending" || status === "success"}
+            disabled={!clientName || !toEmail || status === "sending" || status === "success" || status === "email_error"}
             onClick={handleSend}>
-            {status === "sending" ? "Sending…" : status === "success" ? "✓ Sent!" : "Send Invite ✉"}
+            {status === "sending" ? "Saving…" : status === "success" ? "✓ Sent!" : status === "email_error" ? "✓ Saved" : "Send Invite ✉"}
           </button>
         </div>
       </div>
@@ -2888,7 +2907,18 @@ function Dashboard({ onPreview, userId, db, onUpgrade }) {
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     {t.status === "new" && (
                       <button className="btn btn-sm btn-gold"
-                        onClick={() => db.collection("users").doc(userId).collection("testimonials").doc(t.id).update({ status: "approved" }).catch(console.error)}>
+                        onClick={async () => {
+                          const now = Date.now();
+                          // Update testimonial status
+                          await db.collection("users").doc(userId).collection("testimonials")
+                            .doc(t.id).update({ status: "approved" }).catch(console.error);
+                          // Advance the linked invite to "approved" so pipeline updates
+                          if (t.inviteId) {
+                            db.collection("users").doc(userId).collection("invites")
+                              .doc(t.inviteId).update({ status: "approved", approvedAt: now })
+                              .catch(() => {}); // ignore if invite record doesn't exist
+                          }
+                        }}>
                         Approve
                       </button>
                     )}
