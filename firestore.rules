@@ -1,0 +1,30 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Authenticated dashboard users manage their own data ───────────────────
+    match /users/{userId}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // ── Public recording page: anyone with the link can read campaign details ─
+    // This is required for /record/{campaignId} to load the questions.
+    // Anonymous sign-in is used on the recording page so request.auth != null.
+    match /users/{userId}/campaigns/{campaignId} {
+      allow read: if request.auth != null;
+    }
+
+    // ── Public recording page: clients submit testimonials (no account needed) ─
+    // The recording page signs in anonymously, so request.auth != null is satisfied.
+    // The write path is users/{ownerId}/testimonials — ownerId comes from the campaign.
+    match /users/{userId}/testimonials/{testimonialId} {
+      allow write: if request.auth != null;
+    }
+
+    // ── Invite status updates from the recording page ─────────────────────────
+    // When a client opens or completes a recording, their invite status updates.
+    match /users/{userId}/invites/{inviteId} {
+      allow update: if request.auth != null;
+    }
+  }
+}
