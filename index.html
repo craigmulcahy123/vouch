@@ -1464,7 +1464,9 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
     };
   }, [step]);
 
-  // Steps 2..N+1: reset + auto-open camera preview on each question
+  // Steps 2..N+1: reset state when entering a question page.
+  // No auto-open: getUserMedia must be called from a user gesture on iOS Safari.
+  // The "Tap to start camera" button calls openCamera() from its click handler.
   useEffect(() => {
     if (step < 2 || step > prompts.length + 1) return;
     setRecordPhase("idle");
@@ -1473,11 +1475,7 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
     setRecSecs(0);
     if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
     setLiveStream(null);
-    if (navigator.mediaDevices?.getUserMedia) {
-      navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-        .then(stream => { setCameraAvailable(true); streamRef.current = stream; setLiveStream(stream); })
-        .catch(() => setCameraAvailable(false));
-    }
+    setCameraAvailable(null); // reset so placeholder shows correctly
   }, [step]);
 
   // Wire live stream to video element
@@ -1577,11 +1575,15 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
   function reRecord() {
     setIsRerecording(true);
     setRecordPhase("idle");
-    if (navigator.mediaDevices?.getUserMedia) {
-      navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-        .then(stream => { setCameraAvailable(true); streamRef.current = stream; setLiveStream(stream); })
-        .catch(() => setCameraAvailable(false));
-    }
+    openCamera();
+  }
+
+  // Called from button click handlers so iOS Safari treats it as a user gesture
+  function openCamera() {
+    if (!navigator.mediaDevices?.getUserMedia) { setCameraAvailable(false); return; }
+    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+      .then(stream => { setCameraAvailable(true); streamRef.current = stream; setLiveStream(stream); })
+      .catch(() => setCameraAvailable(false));
   }
 
   function advanceQuestion() {
@@ -1738,7 +1740,16 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
             <button className="btn btn-gold"
               style={{ width: "100%", justifyContent: "center", fontSize: "1rem", padding: "14px 24px", opacity: camTestChecks.every(Boolean) ? 1 : 0.45 }}
               disabled={!camTestChecks.every(Boolean)}
-              onClick={() => setStep(2)}>
+              onClick={() => {
+                // Stop camera test tracks NOW in the click handler — synchronous, before setStep.
+                // If we wait for the useEffect cleanup, mobile browsers may block the next
+                // getUserMedia because the previous stream is still technically active.
+                if (camTestStreamRef.current) {
+                  camTestStreamRef.current.getTracks().forEach(t => t.stop());
+                  camTestStreamRef.current = null;
+                }
+                setStep(2);
+              }}>
               {camTestChecks.every(Boolean) ? "Begin recording →" : "Tick all three to continue"}
             </button>
           </div>
@@ -1777,7 +1788,7 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
               {countdown !== null && "Get ready to speak…"}
               {recordPhase === "recording" && "Recording — speak naturally"}
               {recordPhase === "reviewing" && "Watch your answer, then decide"}
-              {recordPhase === "idle" && countdown === null && (isRerecording ? "Take your time — record again when ready" : "Read the question, then tap record")}
+              {recordPhase === "idle" && countdown === null && (isRerecording ? "Take your time — tap to open camera when ready" : liveStream ? "Read the question, then tap record" : "Tap the camera to get started")}
             </div>
             <div className="cp-q-text">{prompts[qIdx]}</div>
 
@@ -1798,7 +1809,7 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
 
           {/* Camera — flex:1 fills remaining viewport height */}
           <div className="cp-camera-wrap">
-            {(liveStream || videoURLs[qIdx]) ? (
+            {(liveStream || recordPhase === "reviewing") ? (
               <video
                 key={`vid-${step}-${recordPhase}`}
                 ref={videoRef}
@@ -1814,7 +1825,16 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
                 {cameraAvailable === false ? (
                   <><div style={{ fontSize: "1.8rem", marginBottom: 8 }}>📝</div><div style={{ color: "#555", fontSize: "0.82rem" }}>No camera — type below</div></>
                 ) : (
-                  <><div className="ai-spinner" style={{ borderTopColor: "#c8a96e", borderColor: "#222", width: 26, height: 26, borderWidth: 3, marginBottom: 10 }} /><div style={{ color: "#444", fontSize: "0.78rem" }}>Opening camera…</div></>
+                  // Button in the camera area — click is a user gesture so iOS Safari
+                  // will honour the getUserMedia permission request
+                  <button
+                    style={{ background: "none", border: "2px solid #333", borderRadius: 12, color: "#888", cursor: "pointer", padding: "20px 32px", fontSize: "1rem", fontFamily: "DM Sans, sans-serif", display: "flex", flexDirection: "column", alignItems: "center", gap: 10, transition: "border-color 0.2s, color 0.2s" }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = "#c8a96e"; e.currentTarget.style.color = "#c8a96e"; }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = "#333"; e.currentTarget.style.color = "#888"; }}
+                    onClick={openCamera}>
+                    <span style={{ fontSize: "2rem" }}>📷</span>
+                    <span>Tap to start camera</span>
+                  </button>
                 )}
               </div>
             )}
@@ -1843,8 +1863,8 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
           {/* Bottom controls */}
           <div className="cp-bottom">
 
-            {/* Idle: big record button */}
-            {recordPhase === "idle" && countdown === null && cameraAvailable !== false && (
+            {/* Idle: big record button — only shown once camera stream is live */}
+            {recordPhase === "idle" && countdown === null && liveStream && (
               <div className="cp-record-row">
                 <button className="rec-btn-big" onClick={() => setCountdown(3)} aria-label="Start recording">⏺</button>
                 <div>
