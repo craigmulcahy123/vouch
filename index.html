@@ -2925,17 +2925,29 @@ function Dashboard({ onPreview, userId, db, onUpgrade }) {
                     <div style={{ fontWeight: 600, marginBottom: 3 }}>{c.name}</div>
                     <div style={{ color: "var(--muted)", fontSize: "0.82rem" }}>{c.companyName} · {c.industry}</div>
                   </div>
-                  <div style={{ display: "flex", gap: 8 }}>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                     <button className="btn btn-outline btn-sm" onClick={() => onPreview(c)}>Preview</button>
                     <button className="btn btn-gold btn-sm" onClick={() => setInviteTarget(c)}>✉ Invite Client</button>
                     <button className="btn btn-primary btn-sm" onClick={() => copyLink(c.id)}>
                       {copiedId === c.id ? "✓ Copied!" : "Copy Link"}
                     </button>
+                    <button
+                      className="btn btn-outline btn-sm"
+                      style={{ color: "#666", borderColor: "#333" }}
+                      onMouseEnter={e => { e.currentTarget.style.color = "#e05c5c"; e.currentTarget.style.borderColor = "#e05c5c"; }}
+                      onMouseLeave={e => { e.currentTarget.style.color = "#666"; e.currentTarget.style.borderColor = "#333"; }}
+                      onClick={() => {
+                        if (window.confirm("Are you sure you want to delete this campaign? This cannot be undone.")) {
+                          db.collection("users").doc(userId).collection("campaigns").doc(c.id).delete().catch(console.error);
+                        }
+                      }}>
+                      🗑
+                    </button>
                   </div>
                 </div>
                 <div style={{ color: "var(--muted)", fontSize: "0.8rem", marginBottom: 10 }}>{c.prompts.length} questions</div>
                 <div className="link-box">
-                  <span className="link-url">{window.location.host}/record/{c.id}</span>
+                  <span className="link-url">vouchbusiness.com/record/{c.id}</span>
                 </div>
               </div>
             ))}
