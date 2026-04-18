@@ -1104,6 +1104,20 @@ async function analyzeTestimonial(answers, prompts) {
   return await callClaude("analyzeTestimonial", { answers, prompts });
 }
 
+// ── Demo campaign — used when Client View is opened with no campaign selected ─
+const DEMO_CAMPAIGN = {
+  id: "demo",
+  name: "Demo Campaign",
+  companyName: "Vouch",
+  prompts: [
+    "Tell us a bit about yourself and what your business does?",
+    "What problem were you trying to solve before working with us?",
+    "What results have you seen since we started working together?",
+    "What would you tell someone who was thinking about working with us?",
+  ],
+  ownerId: null,
+};
+
 // ── Email HTML builder ────────────────────────────────────────────────────────
 function buildEmailHTML({ clientName, companyName, campaignName, prompts, recordingLink }) {
   const promptRows = prompts.map((p, i) => `
@@ -3397,7 +3411,7 @@ function App() {
             </div>
           </>
         ) : view === "client" ? (
-          <ClientPage campaign={previewCampaign} onBack={() => { setView("dashboard"); setPreviewCampaign(null); }} storage={storage} userId={activeUser.uid} db={db} />
+          <ClientPage campaign={previewCampaign || DEMO_CAMPAIGN} onBack={() => { setView("dashboard"); setPreviewCampaign(null); }} storage={storage} userId={activeUser.uid} db={db} />
         ) : (
           <>
             <nav className="nav">
