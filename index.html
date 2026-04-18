@@ -2504,6 +2504,14 @@ function InvitesKanban({ invites, db, userId, onReview }) {
     if (newStatus === "approved")  patch.approvedAt = now;
     if (newStatus === "delivered") patch.deliveredAt = now;
     await db.collection("users").doc(userId).collection("invites").doc(invite.id).update(patch);
+    // When approving from pipeline, also approve the linked testimonial
+    if (newStatus === "approved" && invite.id) {
+      const tSnap = await db.collection("users").doc(userId).collection("testimonials")
+        .where("inviteId", "==", invite.id).limit(1).get();
+      if (!tSnap.empty) {
+        await tSnap.docs[0].ref.update({ status: "approved" });
+      }
+    }
   }
 
   async function handleResend(invite) {
@@ -2955,7 +2963,8 @@ function Dashboard({ onPreview, userId, db, onUpgrade }) {
             db={db}
             userId={userId}
             onReview={invite => {
-              const t = testimonials.find(t => t.campaignId === invite.campaignId);
+              const t = testimonials.find(t => t.inviteId === invite.id)
+                     || testimonials.find(t => t.campaignId === invite.campaignId);
               if (t) setPlaybackTarget(t);
               else setInnerTab("testimonials");
             }}
