@@ -12,7 +12,11 @@ module.exports = async function handler(req, res) {
   if (inviteId) params.set("inviteId", inviteId);
   if (campaign.ownerId) params.set("owner", campaign.ownerId);
   const qs = params.toString();
-  const recordingLink = `${req.headers.origin}/record/${campaign.id}${qs ? `?${qs}` : ""}`;
+  // Use req.headers.origin when available (cross-origin); fall back to host header.
+  // Same-origin fetch calls omit the Origin header, so origin can be undefined.
+  const baseUrl = req.headers.origin || `https://${req.headers.host}` || "https://vouchbusiness.com";
+  const recordingLink = `${baseUrl}/record/${campaign.id}${qs ? `?${qs}` : ""}`;
+  console.log("[send-invite] recording link:", recordingLink);
   const html = buildEmailHTML({ clientName, companyName: campaign.companyName, campaignName: campaign.name, prompts: campaign.prompts, recordingLink });
 
   const response = await fetch("https://api.resend.com/emails", {

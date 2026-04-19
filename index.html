@@ -1230,48 +1230,76 @@ function InviteModal({ campaign, db, userId, onClose }) {
   const [errorMsg, setErrorMsg] = useState("");
   const [showPreview, setShowPreview] = useState(false);
 
-  const recordingLink = `https://vouchbusiness.com/record/${campaign.id}?owner=${campaign.ownerId || userId}`;
+  // Generate inviteId once on mount so it's available for the preview link
+  // and guaranteed to be the same value when handleSend fires.
+  const [inviteId] = useState(() => Date.now().toString());
+
+  const owner = campaign.ownerId || userId;
+  const recordingLink = `https://vouchbusiness.com/record/${campaign.id}?inviteId=${inviteId}&owner=${owner}`;
+
+  // Log on mount so we can confirm userId is populated before the user clicks Send.
+  React.useEffect(() => {
+    console.log("[vouch/invite] InviteModal mounted — userId:", userId, "| db:", !!db,
+      "| campaign.id:", campaign?.id, "| campaign.ownerId:", campaign?.ownerId,
+      "| inviteId (pre-generated):", inviteId);
+    if (!userId) console.warn("[vouch/invite] ⚠ userId is null/undefined — Firestore write will be skipped!");
+  }, []);
 
   async function handleSend() {
     if (!clientName || !toEmail) return;
     setStatus("sending");
-    const inviteId = Date.now().toString();
     const now = Date.now();
+
+    console.group("[vouch/invite] handleSend");
+    console.log("inviteId        :", inviteId);
+    console.log("userId          :", userId, " | db:", !!db);
+    console.log("campaign.id     :", campaign?.id, "| campaign.ownerId:", campaign?.ownerId);
+    console.log("recordingLink   :", recordingLink);
+    console.log("Firestore path  :", `users/${userId}/invites/${inviteId}`);
+    console.groupEnd();
 
     // 1. Write invite to Firestore FIRST — this is the source of truth for the pipeline.
     //    If email delivery fails the record still exists and the owner can resend.
     if (db && userId) {
+      const inviteDoc = {
+        id: inviteId,
+        clientName,
+        clientEmail: toEmail,
+        toEmail,
+        campaignId: campaign.id,
+        campaignName: campaign.name || "",
+        companyName: campaign.companyName || "",
+        ownerId: userId,
+        status: "invited",
+        sentAt: now,
+        invitedAt: now,
+        openedAt: null,
+        recordedAt: null,
+        approvedAt: null,
+        deliveredAt: null,
+        planValue: 497,
+      };
       try {
-        await db.collection("users").doc(userId).collection("invites").doc(inviteId).set({
-          id: inviteId,
-          clientName,
-          clientEmail: toEmail,
-          toEmail,
-          campaignId: campaign.id,
-          campaignName: campaign.name || "",
-          companyName: campaign.companyName || "",
-          ownerId: userId,
-          status: "invited",
-          sentAt: now,
-          invitedAt: now,
-          openedAt: null,
-          recordedAt: null,
-          approvedAt: null,
-          deliveredAt: null,
-          planValue: 497,
-        });
+        await db.collection("users").doc(userId).collection("invites").doc(inviteId).set(inviteDoc);
+        console.log("[vouch/invite] ✅ Firestore write SUCCESS → users/" + userId + "/invites/" + inviteId);
       } catch (e) {
+        console.error("[vouch/invite] ❌ Firestore write FAILED:", e.code, e.message);
         setErrorMsg("Failed to save invite: " + e.message);
         setStatus("error");
         return;
       }
+    } else {
+      console.warn("[vouch/invite] ⚠ Firestore write SKIPPED — db:", !!db, "| userId:", userId);
     }
 
-    // 2. Send the email
+    // 2. Send the email (includes ?inviteId=...&owner=... in the recording link)
+    console.log("[vouch/invite] sending email to", toEmail, "with inviteId:", inviteId);
     try {
       await sendInviteEmail({ toEmail, clientName, campaign, inviteId });
+      console.log("[vouch/invite] ✅ email sent");
       setStatus("success");
     } catch (e) {
+      console.warn("[vouch/invite] ⚠ email failed (invite already saved):", e.message);
       // Invite is saved in Firestore — owner can resend from the pipeline.
       setErrorMsg(e.message);
       setStatus("email_error");
@@ -1436,9 +1464,18 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
 
   // Mark invite as opened
   useEffect(() => {
-    if (!inviteId || !ownerId || !db) return;
+    console.log("[vouch/record] opened-check — inviteId:", inviteId, "| ownerId:", ownerId, "| db:", !!db);
+    if (!inviteId || !ownerId || !db) {
+      if (!inviteId) console.log("[vouch/record] no ?inviteId= in URL — opened update skipped (direct link, not invite email)");
+      return;
+    }
+    const path = `users/${ownerId}/invites/${inviteId}`;
+    console.log("[vouch/record] marking invite opened →", path);
     db.collection("users").doc(ownerId).collection("invites").doc(inviteId)
-      .update({ status: "opened", openedAt: Date.now() }).catch(() => {});
+      .update({ status: "opened", openedAt: Date.now() })
+      .then(() => console.log("[vouch/record] ✅ invite marked opened"))
+      .catch(e => console.error("[vouch/record] ❌ opened update failed:", e.code, e.message,
+        e.code === "permission-denied" ? "\n  → Add to Firestore rules: match /users/{uid}/invites/{id} { allow update: if request.auth != null; }" : ""));
   }, [inviteId, ownerId, db]);
 
   // Load saved progress from localStorage
@@ -1670,9 +1707,14 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
       if (!ownerId) console.warn("  → campaign.ownerId is missing. Campaign object:", campaign);
     }
     if (inviteId && ownerId && db) {
+      const recPath = `users/${ownerId}/invites/${inviteId}`;
+      console.log("[vouch/record] marking invite recorded →", recPath);
       db.collection("users").doc(ownerId).collection("invites").doc(inviteId)
         .update({ status: "recorded", recordedAt: Date.now() })
-        .catch(e => console.warn("[vouch] invite status update failed:", e.code));
+        .then(() => console.log("[vouch/record] ✅ invite marked recorded"))
+        .catch(e => console.error("[vouch/record] ❌ recorded update failed:", e.code, e.message));
+    } else {
+      console.log("[vouch/record] invite recorded update skipped — inviteId:", inviteId, "| ownerId:", ownerId);
     }
     if (lsKey) try { localStorage.removeItem(lsKey); } catch {}
     setSubmitting(false);
@@ -2718,7 +2760,12 @@ function Dashboard({ onPreview, userId, db, onUpgrade }) {
     const unsubInvites = db.collection("users").doc(userId).collection("invites")
       .orderBy("invitedAt", "desc")
       .onSnapshot(
-        snap => setInvites(snap.docs.map(d => d.data())),
+        snap => {
+          console.log("[vouch] invites snapshot — count:", snap.docs.length,
+            "| statuses:", snap.docs.map(d => d.data().status),
+            "| ids:", snap.docs.map(d => d.id));
+          setInvites(snap.docs.map(d => d.data()));
+        },
         err => console.error("[vouch] invites listener error:", err.code, err.message)
       );
     return () => { unsubCampaigns(); unsubTestimonials(); unsubInvites(); };
