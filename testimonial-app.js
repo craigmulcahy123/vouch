@@ -2004,7 +2004,7 @@ function InAppPricing({ onGetStarted }) {
 
   const plans = [
     { id: "starter", name: "Starter", base: 497, popular: false, color: "var(--card)",
-      features: ["3 video testimonials / month", "Branded invite emails", "AI-generated prompts", "Basic captions & editing", "Email support"] },
+      features: ["10 video testimonials / month", "Branded invite emails", "AI-generated prompts", "Basic captions & editing", "Email support"] },
     { id: "growth", name: "Growth", base: 997, popular: true, color: "var(--ink)",
       features: ["8 video testimonials / month", "Priority 5-day turnaround", "Social clips (3 formats)", "Custom branding & captions", "Follow-up sequences", "Slack support"] },
     { id: "agency", name: "Agency", base: 1997, popular: false, color: "var(--card)",
