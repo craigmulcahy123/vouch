@@ -2837,7 +2837,14 @@ function Dashboard({ onPreview, userId, db, onUpgrade }) {
     setTimeout(() => setCopiedId(null), 2000);
   }
 
-  async function downloadVideo(url, filename) {
+  function markDownloaded(testimonialId) {
+    if (!db || !userId || !testimonialId) return;
+    db.collection("users").doc(userId).collection("testimonials")
+      .doc(testimonialId).update({ downloaded: true, downloadedAt: Date.now() })
+      .catch(console.error);
+  }
+
+  async function downloadVideo(url, filename, testimonialId) {
     try {
       const res = await fetch(url);
       const blob = await res.blob();
@@ -2849,6 +2856,7 @@ function Dashboard({ onPreview, userId, db, onUpgrade }) {
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(objUrl);
+      markDownloaded(testimonialId);
     } catch (e) {
       alert("Download failed. Try right-clicking the video in the Watch view and saving.");
     }
@@ -2872,6 +2880,7 @@ function Dashboard({ onPreview, userId, db, onUpgrade }) {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(objUrl);
+    markDownloaded(t.id);
   }
 
   return (
@@ -3075,6 +3084,11 @@ function Dashboard({ onPreview, userId, db, onUpgrade }) {
                     <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
                       <div className="t-name">{t.clientName}</div>
                       <span className={`badge badge-${t.status}`}>{t.status}</span>
+                      {t.downloaded && (
+                        <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "#6dbf8a", background: "#6dbf8a18", border: "1px solid #6dbf8a44", borderRadius: 6, padding: "2px 7px", letterSpacing: "0.04em" }}>
+                          ✓ Downloaded
+                        </span>
+                      )}
                     </div>
                     <div className="t-company">{t.clientCompany} · {t.campaignName}</div>
                     <div className="t-stars">{"★".repeat(t.rating)}{"☆".repeat(5 - t.rating)}</div>
@@ -3135,7 +3149,7 @@ function Dashboard({ onPreview, userId, db, onUpgrade }) {
                                     onMouseEnter={e => e.currentTarget.style.background = "#222"}
                                     onMouseLeave={e => e.currentTarget.style.background = "none"}
                                     onClick={() => {
-                                      downloadVideo(url, `${(t.clientName || "clip").replace(/\s+/g, "-")}-Q${Number(key) + 1}.webm`);
+                                      downloadVideo(url, `${(t.clientName || "clip").replace(/\s+/g, "-")}-Q${Number(key) + 1}.webm`, t.id);
                                       setDownloadDropdown(null);
                                     }}>
                                     🎥 Download Q{Number(key) + 1} video
@@ -3167,6 +3181,26 @@ function Dashboard({ onPreview, userId, db, onUpgrade }) {
                         </>
                       )}
                     </div>
+                    <button
+                      className="btn btn-sm btn-outline"
+                      style={{ color: "#666", borderColor: "#333", marginTop: 2 }}
+                      onMouseEnter={e => {
+                        if (!t.downloaded) { e.currentTarget.style.color = "#e05c5c"; e.currentTarget.style.borderColor = "#e05c5c"; }
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.color = "#666"; e.currentTarget.style.borderColor = "#333";
+                      }}
+                      onClick={() => {
+                        if (t.downloaded) {
+                          alert("This testimonial has been downloaded and cannot be deleted. Contact hello@vouchbusiness.com if you need assistance.");
+                          return;
+                        }
+                        if (window.confirm(`Delete testimonial from ${t.clientName || "this client"}? This cannot be undone.`)) {
+                          db.collection("users").doc(userId).collection("testimonials").doc(t.id).delete().catch(console.error);
+                        }
+                      }}>
+                      🗑 Delete
+                    </button>
                   </div>
                 </div>
               ))}
