@@ -1438,6 +1438,7 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
 
   // Rating & submit
   const [rating, setRating]               = useState(0);
+  const [submitBlocked, setSubmitBlocked] = useState(false); // true when user clicks Submit with no answers
   const [submitting, setSubmitting]       = useState(false);
   const [submitPhase, setSubmitPhase]     = useState(""); // uploading | analyzing
   const [uploadProgress, setUploadProgress] = useState({});
@@ -2054,14 +2055,29 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
                   </div>
                 )}
               </div>
-            ) : (
-              <button className="btn btn-gold"
-                style={{ width: "100%", justifyContent: "center", marginTop: 8, fontSize: "1rem", padding: "14px 24px" }}
-                disabled={!rating}
-                onClick={handleSubmit}>
-                Submit Testimonial ✦
-              </button>
-            )}
+            ) : (() => {
+                const hasAnswer = Object.values(videoBlobs).some(Boolean) ||
+                  Object.values(answers).some(v => typeof v === "string" && v.trim().length > 0);
+                return (
+                  <>
+                    <button className="btn btn-gold"
+                      style={{ width: "100%", justifyContent: "center", marginTop: 8, fontSize: "1rem", padding: "14px 24px" }}
+                      disabled={!rating || !hasAnswer}
+                      onClick={() => {
+                        if (!hasAnswer) { setSubmitBlocked(true); return; }
+                        setSubmitBlocked(false);
+                        handleSubmit();
+                      }}>
+                      Submit Testimonial ✦
+                    </button>
+                    {submitBlocked && !hasAnswer && (
+                      <p style={{ marginTop: 10, color: "#e05c5c", fontSize: "0.83rem", textAlign: "center" }}>
+                        Please answer at least one question before submitting.
+                      </p>
+                    )}
+                  </>
+                );
+              })()}
           </div>
         </div>
       )}
