@@ -2571,11 +2571,11 @@ const PROMPT_TEMPLATES = [
 
 // ── Plan definitions ──────────────────────────────────────────────────────────
 const PLANS = {
-  free:       { name: "Free",       monthlyLimit: 1,        price: "€0/mo" },
-  solo:       { name: "Solo",       monthlyLimit: 5,        price: "€49/mo" },
-  business:   { name: "Business",   monthlyLimit: 20,       price: "€149/mo" },
-  agency:     { name: "Agency",     monthlyLimit: Infinity,  price: "€299/mo" },
-  enterprise: { name: "Enterprise", monthlyLimit: Infinity,  price: "€999/mo" },
+  free:       { name: "Free",       price: 0,   limit: 1,    badge: null,           features: ["1 testimonial / month", "Basic Vouch profile page", "Vouch branding", "Listed in directory"] },
+  solo:       { name: "Solo",       price: 49,  limit: 5,    badge: null,           features: ["5 testimonials / month", "Custom profile URL", "Remove Vouch branding", "Embeddable widget", "Basic analytics"] },
+  business:   { name: "Business",   price: 149, limit: 20,   badge: "⚡ AI Editing", features: ["20 testimonials / month", "Vouch Verified badge", "AI editing & social clips", "Testimonial wall widget", "Advanced analytics", "Automated follow-ups"] },
+  agency:     { name: "Agency",     price: 299, limit: 999,  badge: "⚡ AI Editing", features: ["Unlimited testimonials", "Multiple brand profiles", "White-label platform", "API & CRM integrations", "Dedicated account manager"] },
+  enterprise: { name: "Enterprise", price: 999, limit: 9999, badge: "⚡ AI Editing", features: ["Everything in Agency", "Custom SLA & uptime", "SSO & advanced security", "Custom integrations", "Quarterly business reviews"] },
 };
 
 // ── Invites Kanban ────────────────────────────────────────────────────────────
@@ -2731,8 +2731,39 @@ function InvitesKanban({ invites, db, userId, onReview }) {
 // ── Dashboard ──────────────────────────────────────────────────────────────
 function Dashboard({ onPreview, userId, db, onUpgrade }) {
   const [innerTab, setInnerTab] = useState("campaigns");
-  const planKey = "business"; // default everyone to Business for testing
-  const plan = PLANS[planKey];
+
+  // Plan state — loaded from Firestore users/{userId}.plan; defaults to "free"
+  const [planKey, setPlanKey] = useState("free");
+  const [planLoaded, setPlanLoaded] = useState(false);
+  const plan = PLANS[planKey] || PLANS.free;
+
+  // Load plan from Firestore on mount
+  useEffect(() => {
+    if (!db || !userId) return;
+    const unsubPlan = db.collection("users").doc(userId)
+      .onSnapshot(snap => {
+        const data = snap.data();
+        const stored = data?.plan;
+        setPlanKey(PLANS[stored] ? stored : "free");
+        setPlanLoaded(true);
+      }, err => {
+        console.error("[vouch] plan listener error:", err.message);
+        setPlanLoaded(true);
+      });
+    return () => unsubPlan();
+  }, [db, userId]);
+
+  // Write plan change to Firestore (testing mode + future Stripe webhook target)
+  async function setUserPlan(key) {
+    if (!PLANS[key] || !db || !userId) return;
+    setPlanKey(key);
+    try {
+      await db.collection("users").doc(userId).set({ plan: key }, { merge: true });
+    } catch (e) {
+      console.error("[vouch] failed to save plan:", e.message);
+    }
+  }
+
   const [inviteTarget, setInviteTarget] = useState(null);
   const [playbackTarget, setPlaybackTarget] = useState(null);
   const [editTarget, setEditTarget] = useState(null);
@@ -2929,20 +2960,30 @@ function Dashboard({ onPreview, userId, db, onUpgrade }) {
         ))}
       </div>
 
-      {/* Limit banner — shown across campaigns + testimonials tabs */}
+      {/* Limit banner — shown across campaigns + testimonials + invites tabs */}
       {innerTab !== "billing" && (() => {
         const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime();
         const monthlyCount = testimonials.filter(t => t.createdAt >= monthStart).length;
-        const atLimit = plan.monthlyLimit !== Infinity && monthlyCount >= plan.monthlyLimit;
-        return atLimit ? (
+        const atLimit = monthlyCount >= plan.limit;
+        const nearLimit = !atLimit && plan.limit < 9999 && monthlyCount >= Math.max(1, plan.limit - 1);
+        if (atLimit) return (
           <div style={{ background: "#2a1a00", border: "1px solid #a06020", borderRadius: 10, padding: "14px 18px", marginBottom: 20, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
             <div>
               <div style={{ fontWeight: 600, color: "#f0a040", marginBottom: 3 }}>You've reached your {plan.name} plan limit</div>
-              <div style={{ fontSize: "0.85rem", color: "#a06020" }}>{monthlyCount} of {plan.monthlyLimit} testimonials used this month — upgrade to collect more.</div>
+              <div style={{ fontSize: "0.85rem", color: "#a06020" }}>{monthlyCount} of {plan.limit} testimonials used this month — upgrade to collect more.</div>
             </div>
             <button className="btn btn-gold btn-sm" onClick={onUpgrade}>Upgrade Plan →</button>
           </div>
-        ) : null;
+        );
+        if (nearLimit) return (
+          <div style={{ background: "#1e1800", border: "1px solid #6a5010", borderRadius: 10, padding: "12px 18px", marginBottom: 20, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+            <div style={{ fontSize: "0.85rem", color: "#c09030" }}>
+              {monthlyCount} of {plan.limit} testimonials used this month — {plan.limit - monthlyCount} remaining.
+            </div>
+            <button className="btn btn-sm" style={{ background: "transparent", border: "1px solid #a06020", color: "#c09030" }} onClick={onUpgrade}>Upgrade →</button>
+          </div>
+        );
+        return null;
       })()}
 
       {/* Campaigns tab */}
@@ -3238,51 +3279,126 @@ function Dashboard({ onPreview, userId, db, onUpgrade }) {
       {innerTab === "billing" && (() => {
         const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime();
         const monthlyCount = testimonials.filter(t => t.createdAt >= monthStart).length;
-        const limitDisplay = plan.monthlyLimit === Infinity ? "Unlimited" : plan.monthlyLimit;
-        const pct = plan.monthlyLimit === Infinity ? 0 : Math.min(100, Math.round((monthlyCount / plan.monthlyLimit) * 100));
+        const isUnlimited = plan.limit >= 999;
+        const limitDisplay = isUnlimited ? "Unlimited" : plan.limit;
+        const pct = isUnlimited ? 0 : Math.min(100, Math.round((monthlyCount / plan.limit) * 100));
+        const atLimit = monthlyCount >= plan.limit;
+        const planEntries = Object.entries(PLANS); // [[key, def], ...]
+
         return (
-          <div style={{ maxWidth: 520 }}>
+          <div style={{ maxWidth: 560 }}>
             <div className="section-title serif" style={{ marginBottom: 20 }}>Plan & Billing</div>
 
-            <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 14, padding: "24px 28px", marginBottom: 20 }}>
+            {/* ── Current plan card ── */}
+            <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 14, padding: "24px 28px", marginBottom: 16 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
                 <div>
-                  <div style={{ fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)", marginBottom: 6 }}>Current Plan</div>
-                  <div style={{ fontFamily: "Instrument Serif, serif", fontSize: "1.8rem", color: "var(--gold)" }}>{plan.name}</div>
-                  <div style={{ fontSize: "0.85rem", color: "var(--muted)", marginTop: 2 }}>{plan.price}</div>
+                  <div style={{ fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)", marginBottom: 6 }}>Current Plan</div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div style={{ fontFamily: "Instrument Serif, serif", fontSize: "1.9rem", color: "var(--gold)", lineHeight: 1 }}>{plan.name}</div>
+                    {plan.badge && (
+                      <span style={{ background: "#fdf6e8", border: "1px solid var(--gold-light, #e8d5a3)", color: "var(--gold)", fontSize: "0.68rem", fontWeight: 700, padding: "2px 9px", borderRadius: 99 }}>
+                        {plan.badge}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: "0.85rem", color: "var(--muted)", marginTop: 4 }}>
+                    {plan.price === 0 ? "Free forever" : `€${plan.price} / month`}
+                  </div>
                 </div>
-                <button className="btn btn-gold" onClick={onUpgrade}>Upgrade Plan →</button>
+                {planKey !== "enterprise" && (
+                  <button className="btn btn-gold" onClick={onUpgrade}>Upgrade Plan →</button>
+                )}
               </div>
 
-              <div style={{ marginBottom: 8 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.85rem", marginBottom: 8 }}>
+              {/* Usage bar */}
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.84rem", marginBottom: 8 }}>
                   <span style={{ color: "var(--muted)" }}>Testimonials this month</span>
-                  <span style={{ fontWeight: 600 }}>{monthlyCount} / {limitDisplay}</span>
+                  <span style={{ fontWeight: 600, color: atLimit ? "#e05c5c" : "var(--ink)" }}>
+                    {monthlyCount} of {limitDisplay} used
+                  </span>
                 </div>
-                {plan.monthlyLimit !== Infinity && (
+                {!isUnlimited && (
                   <div style={{ height: 8, background: "var(--border)", borderRadius: 99, overflow: "hidden" }}>
-                    <div style={{ height: "100%", width: `${pct}%`, background: pct >= 100 ? "#e05c5c" : "var(--gold)", borderRadius: 99, transition: "width 0.4s" }} />
+                    <div style={{ height: "100%", width: `${pct}%`, background: pct >= 100 ? "#e05c5c" : pct >= 80 ? "#e8a040" : "var(--gold)", borderRadius: 99, transition: "width 0.4s" }} />
+                  </div>
+                )}
+                {isUnlimited && (
+                  <div style={{ height: 8, background: "var(--border)", borderRadius: 99 }}>
+                    <div style={{ height: "100%", width: "100%", background: "var(--gold)", borderRadius: 99, opacity: 0.3 }} />
+                  </div>
+                )}
+                {atLimit && !isUnlimited && (
+                  <div style={{ fontSize: "0.8rem", color: "#e05c5c", marginTop: 8 }}>
+                    Limit reached — <button onClick={onUpgrade} style={{ background: "none", border: "none", color: "#e05c5c", textDecoration: "underline", cursor: "pointer", fontFamily: "inherit", fontSize: "inherit", padding: 0 }}>upgrade your plan</button> to collect more this month.
                   </div>
                 )}
               </div>
-              {plan.monthlyLimit !== Infinity && monthlyCount >= plan.monthlyLimit && (
-                <div style={{ fontSize: "0.82rem", color: "#e05c5c", marginTop: 10 }}>Limit reached — upgrade to collect more testimonials this month.</div>
-              )}
+
+              {/* Plan features */}
+              <div style={{ marginTop: 18, paddingTop: 18, borderTop: "1px solid var(--border)" }}>
+                <div style={{ fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)", marginBottom: 10 }}>What's included</div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 12px" }}>
+                  {plan.features.map((f, i) => (
+                    <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 7, fontSize: "0.82rem", color: "#444" }}>
+                      <span style={{ color: "var(--gold)", fontWeight: 700, flexShrink: 0, marginTop: 1 }}>✓</span>
+                      {f}
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
 
-            <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 14, padding: "20px 28px" }}>
-              <div style={{ fontSize: "0.8rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)", marginBottom: 14 }}>Plan Comparison</div>
-              {Object.values(PLANS).map(p => (
-                <div key={p.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid var(--border)", opacity: p.name === plan.name ? 1 : 0.6 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    {p.name === plan.name && <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--gold)", display: "inline-block" }} />}
-                    {p.name !== plan.name && <span style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--border)", display: "inline-block" }} />}
-                    <span style={{ fontWeight: p.name === plan.name ? 600 : 400 }}>{p.name}</span>
+            {/* ── Plan comparison table ── */}
+            <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 14, padding: "20px 28px", marginBottom: 16 }}>
+              <div style={{ fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)", marginBottom: 14 }}>All Plans</div>
+              {planEntries.map(([key, p]) => {
+                const isCurrent = key === planKey;
+                const unlim = p.limit >= 999;
+                return (
+                  <div key={key} style={{ display: "flex", alignItems: "center", padding: "10px 0", borderBottom: "1px solid var(--border)", gap: 10 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: "50%", background: isCurrent ? "var(--gold)" : "var(--border)", display: "inline-block", flexShrink: 0 }} />
+                    <span style={{ fontWeight: isCurrent ? 700 : 400, flex: 1 }}>{p.name}</span>
+                    {p.badge && <span style={{ fontSize: "0.65rem", fontWeight: 700, color: "var(--gold)", background: "#fdf6e8", border: "1px solid #e8d5a3", borderRadius: 99, padding: "1px 7px", flexShrink: 0 }}>{p.badge}</span>}
+                    <span style={{ fontSize: "0.83rem", color: "var(--muted)", width: 90, textAlign: "right", flexShrink: 0 }}>{unlim ? "Unlimited" : `${p.limit}/mo`}</span>
+                    <span style={{ fontSize: "0.83rem", color: "var(--muted)", width: 72, textAlign: "right", flexShrink: 0 }}>{p.price === 0 ? "Free" : `€${p.price}/mo`}</span>
+                    {isCurrent ? (
+                      <span style={{ fontSize: "0.7rem", fontWeight: 700, color: "var(--gold)", width: 54, textAlign: "right", flexShrink: 0 }}>Current</span>
+                    ) : (
+                      <button onClick={onUpgrade} style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--muted)", background: "none", border: "none", cursor: "pointer", width: 54, textAlign: "right", flexShrink: 0, padding: 0, fontFamily: "inherit" }}>
+                        {p.price > plan.price ? "Upgrade" : "Downgrade"}
+                      </button>
+                    )}
                   </div>
-                  <span style={{ fontSize: "0.85rem", color: "var(--muted)" }}>{p.monthlyLimit === Infinity ? "Unlimited" : p.monthlyLimit} / mo</span>
-                  <span style={{ fontSize: "0.85rem", color: "var(--muted)" }}>{p.price}</span>
-                </div>
-              ))}
+                );
+              })}
+            </div>
+
+            {/* ── Testing mode: plan switcher ── */}
+            <div style={{ background: "#0e0e0e", border: "1px solid #2a2a2a", borderRadius: 14, padding: "18px 24px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                <span style={{ fontSize: "0.68rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "#555", background: "#1a1a1a", border: "1px solid #333", borderRadius: 99, padding: "2px 9px" }}>🧪 Testing mode</span>
+                <span style={{ fontSize: "0.78rem", color: "#555" }}>No Stripe required</span>
+              </div>
+              <div style={{ fontSize: "0.82rem", color: "#888", marginBottom: 14 }}>
+                Switch plan instantly to test different limits and features. Persists in Firestore — Stripe webhook will override this when connected.
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {planEntries.map(([key, p]) => (
+                  <button key={key} onClick={() => setUserPlan(key)} style={{
+                    padding: "7px 14px", borderRadius: 8, border: "1px solid",
+                    borderColor: key === planKey ? "var(--gold)" : "#2a2a2a",
+                    background: key === planKey ? "rgba(200,169,110,0.12)" : "transparent",
+                    color: key === planKey ? "var(--gold)" : "#666",
+                    fontFamily: "DM Sans, sans-serif", fontWeight: key === planKey ? 700 : 400,
+                    fontSize: "0.82rem", cursor: "pointer", transition: "all 0.15s",
+                  }}>
+                    {p.name}
+                    {key === planKey && " ✓"}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         );
