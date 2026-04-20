@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pricing — Vouch</title>
+  <meta name="description" content="Simple, transparent pricing for video testimonials. From free to enterprise." />
+  <script>
+    (function () {
+      var size = 192, c = document.createElement("canvas");
+      c.width = c.height = size;
+      var ctx = c.getContext("2d"), r = size * 0.18;
+      ctx.fillStyle = "#0e0e0e";
+      ctx.beginPath();
+      ctx.moveTo(r,0); ctx.lineTo(size-r,0); ctx.quadraticCurveTo(size,0,size,r);
+      ctx.lineTo(size,size-r); ctx.quadraticCurveTo(size,size,size-r,size);
+      ctx.lineTo(r,size); ctx.quadraticCurveTo(0,size,0,size-r);
+      ctx.lineTo(0,r); ctx.quadraticCurveTo(0,0,r,0); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = "#c8a96e";
+      ctx.font = "italic bold " + Math.round(size*0.68) + "px Georgia,serif";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText("V", size/2, size*0.53);
+      var png = c.toDataURL("image/png");
+      var lnk = document.createElement("link"); lnk.rel = "icon"; lnk.href = png; document.head.appendChild(lnk);
+    })();
+  </script>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone@7.23.4/babel.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --ink: #0e0e0e;
+      --paper: #f5f0e8;
+      --cream: #ede8dc;
+      --gold: #c8a96e;
+      --gold-light: #e8d5a3;
+      --muted: #7a7060;
+      --card: #faf7f2;
+      --border: #ddd8cc;
+      --shadow: 0 2px 16px rgba(14,14,14,0.08);
+      --shadow-lg: 0 8px 40px rgba(14,14,14,0.14);
+    }
+    body { font-family: 'DM Sans', sans-serif; background: var(--paper); color: var(--ink); min-height: 100vh; }
+    #root { min-height: 100vh; }
+
+    /* Nav */
+    .nav {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 18px 40px; border-bottom: 1px solid var(--border);
+      background: var(--paper); position: sticky; top: 0; z-index: 100;
+    }
+    .nav-logo { font-family: 'Instrument Serif', serif; font-size: 1.5rem; letter-spacing: -0.02em; text-decoration: none; color: var(--ink); }
+    .nav-logo span { color: var(--gold); font-style: italic; }
+
+    /* Buttons */
+    .btn {
+      padding: 11px 24px; border-radius: 9px; border: none; cursor: pointer;
+      font-family: 'DM Sans', sans-serif; font-weight: 600; font-size: 0.9rem;
+      transition: all 0.2s; display: inline-flex; align-items: center; gap: 8px;
+      text-decoration: none;
+    }
+    .btn-outline { background: transparent; color: var(--ink); border: 1.5px solid var(--border); }
+    .btn-outline:hover { border-color: var(--ink); }
+    .btn-ink { background: var(--ink); color: #fff; }
+    .btn-ink:hover { background: #2a2a2a; }
+    .btn-gold { background: var(--gold); color: #fff; border: none; }
+    .btn-gold:hover { background: #b8993e; }
+    .btn-sm { padding: 7px 16px; font-size: 0.82rem; }
+
+    /* Toggle */
+    .toggle-wrap {
+      display: inline-flex; align-items: center; gap: 12px;
+      background: var(--cream); border: 1px solid var(--border);
+      border-radius: 99px; padding: 5px 6px;
+    }
+    .toggle-btn {
+      padding: 7px 20px; border-radius: 99px; border: none; cursor: pointer;
+      font-family: 'DM Sans', sans-serif; font-weight: 600; font-size: 0.88rem;
+      transition: all 0.2s; display: flex; align-items: center; gap: 8px;
+      background: transparent; color: var(--muted);
+    }
+    .toggle-btn.active { background: var(--ink); color: #fff; }
+    .save-badge {
+      background: var(--gold); color: #fff; font-size: 0.65rem; font-weight: 700;
+      padding: 2px 8px; border-radius: 99px; text-transform: uppercase; letter-spacing: 0.06em;
+    }
+
+    /* Plan grid */
+    .plans-grid {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 14px;
+      max-width: 1160px;
+      margin: 0 auto;
+      padding: 0 20px 24px;
+      align-items: start;
+    }
+    @media (max-width: 1100px) { .plans-grid { grid-template-columns: repeat(3, 1fr); } }
+    @media (max-width: 720px)  { .plans-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 460px)  { .plans-grid { grid-template-columns: 1fr; } }
+
+    .plan-card {
+      border-radius: 18px; overflow: hidden;
+      display: flex; flex-direction: column;
+      background: var(--card); border: 1px solid var(--border);
+    }
+    .plan-card.popular {
+      background: var(--ink); border: 2px solid var(--gold);
+      transform: scale(1.03);
+      box-shadow: 0 12px 40px rgba(0,0,0,0.18);
+    }
+    .plan-banner {
+      padding: 7px; text-align: center;
+      font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
+    }
+    .plan-banner.popular-banner { background: var(--gold); color: #fff; }
+    .plan-banner.ai-banner { background: #fdf6e8; color: var(--gold); border-bottom: 1px solid var(--border); font-size: 0.68rem; }
+    .plan-body { padding: 22px 20px; flex: 1; display: flex; flex-direction: column; }
+    .plan-name { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 6px; color: var(--muted); }
+    .plan-card.popular .plan-name { color: #888; }
+    .plan-price { font-family: 'Instrument Serif', serif; font-size: 2.5rem; font-weight: 600; line-height: 1; margin-bottom: 2px; color: var(--ink); }
+    .plan-card.popular .plan-price { color: #fff; }
+    .plan-period { font-size: 0.78rem; color: var(--muted); margin-bottom: 4px; }
+    .plan-card.popular .plan-period { color: #666; }
+    .plan-billing { font-size: 0.73rem; color: var(--muted); margin-bottom: 4px; }
+    .plan-card.popular .plan-billing { color: #888; }
+    .plan-billing .save { color: var(--gold); font-weight: 600; }
+    .plan-divider { height: 1px; background: var(--border); margin: 14px 0; }
+    .plan-card.popular .plan-divider { background: #2a2a2a; }
+    .plan-features { list-style: none; display: flex; flex-direction: column; gap: 9px; margin-bottom: 20px; flex: 1; }
+    .plan-feature { display: flex; gap: 9px; align-items: flex-start; font-size: 0.83rem; color: #333; }
+    .plan-card.popular .plan-feature { color: #ccc; }
+    .feature-check {
+      width: 16px; height: 16px; border-radius: 50%; background: #fdf6e8; color: var(--gold);
+      font-size: 0.55rem; font-weight: 700; display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; margin-top: 2px;
+    }
+    .plan-card.popular .feature-check { background: #1e1e1e; }
+    .plan-note { font-size: 0.74rem; color: var(--muted); text-align: center; margin-bottom: 10px; }
+    .plan-card.popular .plan-note { color: #666; }
+    .plan-ai-badge {
+      text-align: center; margin-bottom: 12px;
+    }
+    .plan-ai-badge span {
+      display: inline-block; background: #1e1e1e; border: 1px solid #333;
+      border-radius: 99px; padding: 3px 12px; font-size: 0.67rem; font-weight: 700;
+      color: var(--gold); text-transform: uppercase; letter-spacing: 0.08em;
+    }
+
+    /* Add-ons */
+    .addons-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+    }
+    .addon-card {
+      background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+      padding: 18px 20px; display: flex; flex-direction: column; gap: 6px;
+    }
+    .addon-name { font-weight: 600; font-size: 0.9rem; color: var(--ink); }
+    .addon-desc { font-size: 0.8rem; color: var(--muted); }
+    .addon-price { margin-top: 6px; font-family: 'Instrument Serif', serif; font-size: 1.3rem; color: var(--ink); }
+    .addon-price span { font-family: 'DM Sans', sans-serif; font-size: 0.77rem; color: var(--muted); font-weight: 400; }
+
+    /* Section */
+    .section { max-width: 1160px; margin: 0 auto; padding: 0 20px; }
+    .section-heading { font-family: 'Instrument Serif', serif; font-size: 1.5rem; margin-bottom: 6px; }
+    .section-sub { color: var(--muted); font-size: 0.88rem; margin-bottom: 20px; }
+
+    /* Currency pill */
+    .cur-pill {
+      display: inline-flex; align-items: center; gap: 8px; padding: 5px 14px;
+      border-radius: 20px; background: #fdf6e8; border: 1px solid #e8d4a8;
+      color: var(--gold); font-size: 0.8rem; font-weight: 500;
+    }
+
+    /* Footer */
+    .footer-note {
+      text-align: center; padding: 40px 24px 60px; color: var(--muted); font-size: 0.85rem;
+    }
+
+    @media (max-width: 600px) {
+      .nav { padding: 14px 20px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    const CURRENCIES_MAP = {
+      EU: { symbol: "€", flag: "🇪🇺", rate: 1 },
+      GB: { symbol: "£", flag: "🇬🇧", rate: 0.86 },
+      US: { symbol: "$", flag: "🇺🇸", rate: 1.08 },
+      CA: { symbol: "CA$", flag: "🇨🇦", rate: 1.47 },
+      AU: { symbol: "A$", flag: "🇦🇺", rate: 1.65 },
+      IN: { symbol: "₹", flag: "🇮🇳", rate: 90, discount: 0.5 },
+    };
+    const EU_CODES = ["DE","FR","IT","ES","NL","BE","AT","PT","IE","FI","GR","PL","CZ","RO","HU","SK","SI","HR","LT","LV","EE","LU","MT","CY","DK","SE"];
+
+    function fmtPrice(eurPrice, cur) {
+      if (eurPrice === 0) return cur.symbol + "0";
+      const raw = eurPrice * cur.rate * (cur.discount || 1);
+      return cur.symbol + Math.round(raw);
+    }
+
+    const PLANS = [
+      {
+        id: "free", name: "Free", monthlyEur: 0, annualMonthlyEur: 0, annualTotalEur: 0, annualSavingsEur: 0,
+        popular: false, aiEditing: false, note: "No credit card required", cta: "Get started free",
+        features: ["1 testimonial per month", "Basic Vouch profile page", "Vouch branding on everything", "Listed in Vouch directory"],
+      },
+      {
+        id: "solo", name: "Solo", monthlyEur: 49, annualMonthlyEur: 41, annualTotalEur: 490, annualSavingsEur: 98,
+        popular: false, aiEditing: false, cta: "Start free trial",
+        features: ["5 testimonials per month", "Custom Vouch profile URL", "Remove Vouch branding", "Embeddable widget", "Basic analytics", "Email support"],
+      },
+      {
+        id: "business", name: "Business", monthlyEur: 149, annualMonthlyEur: 124, annualTotalEur: 1490, annualSavingsEur: 298,
+        popular: true, aiEditing: true, cta: "Start free trial",
+        features: ["20 testimonials per month", "Full Vouch profile with video gallery", "Vouch Verified badge for website", "⚡ AI editing — videos ready within minutes", "AI social clips in 3 formats (16:9, 9:16, 1:1)", "Embeddable testimonial wall widget", "Advanced analytics", "Automated follow-up sequences", "Priority email support"],
+      },
+      {
+        id: "agency", name: "Agency", monthlyEur: 299, annualMonthlyEur: 249, annualTotalEur: 2990, annualSavingsEur: 598,
+        popular: false, aiEditing: true, cta: "Start free trial",
+        features: ["Unlimited testimonials", "Multiple brand profiles under one account", "White-label platform", "⚡ AI editing — videos ready within minutes", "API access for CRM integrations", "Zoho / HubSpot / Salesforce integration", "Custom branding and templates", "Dedicated account manager", "Phone support"],
+      },
+      {
+        id: "enterprise", name: "Enterprise", monthlyEur: 999, annualMonthlyEur: 832, annualTotalEur: 9990, annualSavingsEur: 1998,
+        popular: false, aiEditing: true, cta: "Contact us",
+        features: ["Everything in Agency", "Custom SLA and uptime guarantee", "SSO and advanced security", "Custom integrations built for you", "Quarterly business reviews", "Vouch Score API", "Volume pricing for large teams"],
+      },
+    ];
+
+    const ADDONS = [
+      { name: "Vouch Verified badge only", priceEur: 29, period: "/month", desc: "Show the verified badge on your website" },
+      { name: "Extra testimonials (10 pack)", priceEur: 49, period: " one-off", desc: "Need more this month?" },
+      { name: "CRM integration (Zoho/HubSpot/Salesforce)", priceEur: 99, period: "/month", desc: "Connect your CRM" },
+      { name: "Featured listing in Vouch directory", priceEur: 99, period: "/month", desc: "Appear higher in search results" },
+    ];
+
+    function PricingPage() {
+      const [cur, setCur] = useState(CURRENCIES_MAP.EU);
+      const [detected, setDetected] = useState(false);
+      const [annual, setAnnual] = useState(false);
+
+      useEffect(() => {
+        fetch("https://ipapi.co/json/", { signal: AbortSignal.timeout(4000) })
+          .then(r => r.json())
+          .then(d => {
+            const code = EU_CODES.includes(d.country_code) ? "EU" : d.country_code;
+            setCur(CURRENCIES_MAP[code] || CURRENCIES_MAP.EU);
+            setDetected(true);
+          }).catch(() => setDetected(true));
+      }, []);
+
+      function handleCta(plan) {
+        window.location.href = "/index.html";
+      }
+
+      return (
+        <div style={{ minHeight: "100vh" }}>
+
+          {/* Nav */}
+          <nav className="nav">
+            <a href="/index.html" className="nav-logo">Vouch<span>✦</span></a>
+            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+              <a href="/index.html" className="btn btn-outline btn-sm">Sign in</a>
+              <a href="/index.html" className="btn btn-gold btn-sm">Get started free</a>
+            </div>
+          </nav>
+
+          {/* Hero */}
+          <div style={{ textAlign: "center", padding: "64px 24px 48px" }}>
+            <h1 style={{ fontFamily: "Instrument Serif, serif", fontSize: "clamp(2.2rem, 6vw, 3.6rem)", lineHeight: 1.1, marginBottom: 14, letterSpacing: "-0.02em" }}>
+              The trust platform for<br /><em style={{ color: "var(--gold)", fontStyle: "italic" }}>modern businesses</em>
+            </h1>
+            <p style={{ color: "var(--muted)", fontSize: "1.05rem", maxWidth: 420, margin: "0 auto 32px", lineHeight: 1.6 }}>
+              Record today. Polished video ready today.
+            </p>
+
+            {/* Toggle */}
+            <div className="toggle-wrap">
+              <button className={`toggle-btn ${!annual ? "active" : ""}`} onClick={() => setAnnual(false)}>
+                Monthly
+              </button>
+              <button className={`toggle-btn ${annual ? "active" : ""}`} onClick={() => setAnnual(true)}>
+                Annual
+                <span className="save-badge">Save 2 months</span>
+              </button>
+            </div>
+
+            {/* Currency */}
+            <div style={{ marginTop: 16 }}>
+              <span className="cur-pill">
+                {cur.flag} Prices shown in {cur.symbol === "£" ? "GBP" : cur.symbol === "$" ? "USD" : cur.symbol === "€" ? "EUR" : "your currency"}
+                {!detected && " · detecting…"}
+              </span>
+            </div>
+          </div>
+
+          {/* Pricing heading */}
+          <div style={{ textAlign: "center", padding: "0 24px 28px" }}>
+            <h2 style={{ fontFamily: "Instrument Serif, serif", fontSize: "clamp(1.5rem, 4vw, 2.2rem)", lineHeight: 1.15, letterSpacing: "-0.02em", marginBottom: 6 }}>
+              Simple, transparent <em style={{ color: "var(--gold)", fontStyle: "italic" }}>pricing</em>
+            </h2>
+            <p style={{ color: "var(--muted)", fontSize: "0.95rem" }}>No hidden fees. Cancel anytime.</p>
+          </div>
+
+          {/* Plan cards */}
+          <div className="plans-grid">
+            {PLANS.map(p => {
+              const dark = p.popular;
+              const displayPrice = fmtPrice(annual ? p.annualMonthlyEur : p.monthlyEur, cur);
+              const annualTotal  = fmtPrice(p.annualTotalEur, cur);
+              const savings      = fmtPrice(p.annualSavingsEur, cur);
+              return (
+                <div key={p.id} className={`plan-card${dark ? " popular" : ""}`}>
+                  {/* Banner */}
+                  {dark && <div className="plan-banner popular-banner">✦ Most Popular</div>}
+                  {!dark && p.aiEditing && <div className="plan-banner ai-banner">⚡ AI Editing Included</div>}
+
+                  <div className="plan-body">
+                    <div className="plan-name">{p.name}</div>
+                    <div className="plan-price">{displayPrice}</div>
+                    <div className="plan-period">{p.monthlyEur === 0 ? "forever free" : "per month"}</div>
+
+                    {annual && p.monthlyEur > 0 && (
+                      <div className="plan-billing">
+                        Billed {annualTotal}/yr — <span className="save">save {savings}</span>
+                      </div>
+                    )}
+                    {!annual && p.annualSavingsEur > 0 && (
+                      <div className="plan-billing" style={{ color: "var(--gold)", fontWeight: 500 }}>
+                        Save {savings} with annual
+                      </div>
+                    )}
+
+                    <div className="plan-divider" />
+
+                    <ul className="plan-features">
+                      {p.features.map((f, i) => (
+                        <li key={i} className="plan-feature">
+                          <span className="feature-check">✓</span>
+                          {f}
+                        </li>
+                      ))}
+                    </ul>
+
+                    {p.note && <div className="plan-note">{p.note}</div>}
+                    {dark && (
+                      <div className="plan-ai-badge">
+                        <span>⚡ AI Editing Included</span>
+                      </div>
+                    )}
+
+                    <button
+                      className={`btn ${dark ? "btn-gold" : p.monthlyEur === 0 ? "btn-outline" : "btn-ink"}`}
+                      style={{ width: "100%", justifyContent: "center" }}
+                      onClick={() => handleCta(p)}
+                    >
+                      {p.cta}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Add-ons */}
+          <div className="section" style={{ marginTop: 48, paddingBottom: 24 }}>
+            <div className="section-heading">Enhance your plan</div>
+            <div className="section-sub">Optional add-ons available on any paid plan.</div>
+            <div className="addons-grid">
+              {ADDONS.map((a, i) => (
+                <div key={i} className="addon-card">
+                  <div className="addon-name">{a.name}</div>
+                  <div className="addon-desc">{a.desc}</div>
+                  <div className="addon-price">
+                    {fmtPrice(a.priceEur, cur)}<span>{a.period}</span>
+                  </div>
+                  <button className="btn btn-outline btn-sm" style={{ marginTop: 4, justifyContent: "center" }} onClick={() => handleCta(null)}>
+                    Add on
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Guarantee */}
+          <div className="footer-note">
+            🛡 30-day money-back guarantee · No contracts · Cancel anytime
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(<PricingPage />);
+  </script>
+</body>
+</html>

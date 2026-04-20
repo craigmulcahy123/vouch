@@ -1972,44 +1972,61 @@ function UserMenu({ user, auth }) {
 // ── Root App ──────────────────────────────────────────────────────────────────
 const DEMO_USER = { uid: "demo", email: "demo@vouch.app", displayName: "Demo User" };
 
-const BASE_PRICES = { starter: 497, growth: 997, agency: 1997 };
 const CURRENCIES_MAP = {
-  GB: { symbol: "£", flag: "🇬🇧", rate: 1 },
-  US: { symbol: "$", flag: "🇺🇸", rate: 1.27 },
-  CA: { symbol: "CA$", flag: "🇨🇦", rate: 1.72 },
-  AU: { symbol: "A$", flag: "🇦🇺", rate: 1.94 },
-  EU: { symbol: "€", flag: "🇪🇺", rate: 1.17 },
-  IN: { symbol: "₹", flag: "🇮🇳", rate: 52, discount: 0.5 },
+  EU: { symbol: "€", flag: "🇪🇺", rate: 1 },
+  GB: { symbol: "£", flag: "🇬🇧", rate: 0.86 },
+  US: { symbol: "$", flag: "🇺🇸", rate: 1.08 },
+  CA: { symbol: "CA$", flag: "🇨🇦", rate: 1.47 },
+  AU: { symbol: "A$", flag: "🇦🇺", rate: 1.65 },
+  IN: { symbol: "₹", flag: "🇮🇳", rate: 90, discount: 0.5 },
 };
 const EU_CODES = ["DE","FR","IT","ES","NL","BE","AT","PT","IE","FI","GR","PL","CZ","RO","HU","SK","SI","HR","LT","LV","EE","LU","MT","CY","DK","SE"];
 
-function fmtPrice(base, cur) {
-  const raw = base * cur.rate * (cur.discount || 1);
-  return cur.symbol + (Math.ceil(raw / 10) * 10 - 3);
+function fmtPrice(eurPrice, cur) {
+  if (eurPrice === 0) return cur.symbol + "0";
+  const raw = eurPrice * cur.rate * (cur.discount || 1);
+  return cur.symbol + Math.round(raw);
 }
 
+const PRICING_PLANS = [
+  { id: "free", name: "Free", monthlyEur: 0, annualMonthlyEur: 0, annualTotalEur: 0, annualSavingsEur: 0,
+    popular: false, aiEditing: false, note: "No credit card required", cta: "Get started free",
+    features: ["1 testimonial per month", "Basic Vouch profile page", "Vouch branding on everything", "Listed in Vouch directory"] },
+  { id: "solo", name: "Solo", monthlyEur: 49, annualMonthlyEur: 41, annualTotalEur: 490, annualSavingsEur: 98,
+    popular: false, aiEditing: false, cta: "Start free trial",
+    features: ["5 testimonials per month", "Custom Vouch profile URL", "Remove Vouch branding", "Embeddable widget", "Basic analytics", "Email support"] },
+  { id: "business", name: "Business", monthlyEur: 149, annualMonthlyEur: 124, annualTotalEur: 1490, annualSavingsEur: 298,
+    popular: true, aiEditing: true, cta: "Start free trial",
+    features: ["20 testimonials per month", "Full Vouch profile with video gallery", "Vouch Verified badge for website", "⚡ AI editing — videos ready within minutes", "AI social clips in 3 formats (16:9, 9:16, 1:1)", "Embeddable testimonial wall widget", "Advanced analytics", "Automated follow-up sequences", "Priority email support"] },
+  { id: "agency", name: "Agency", monthlyEur: 299, annualMonthlyEur: 249, annualTotalEur: 2990, annualSavingsEur: 598,
+    popular: false, aiEditing: true, cta: "Start free trial",
+    features: ["Unlimited testimonials", "Multiple brand profiles under one account", "White-label platform", "⚡ AI editing — videos ready within minutes", "API access for CRM integrations", "Zoho / HubSpot / Salesforce integration", "Custom branding and templates", "Dedicated account manager", "Phone support"] },
+  { id: "enterprise", name: "Enterprise", monthlyEur: 999, annualMonthlyEur: 832, annualTotalEur: 9990, annualSavingsEur: 1998,
+    popular: false, aiEditing: true, cta: "Contact us",
+    features: ["Everything in Agency", "Custom SLA and uptime guarantee", "SSO and advanced security", "Custom integrations built for you", "Quarterly business reviews", "Vouch Score API", "Volume pricing for large teams"] },
+];
+
+const PRICING_ADDONS = [
+  { name: "Vouch Verified badge only", priceEur: 29, period: "/month", desc: "Show the verified badge on your website" },
+  { name: "Extra testimonials (10 pack)", priceEur: 49, period: " one-off", desc: "Need more this month?" },
+  { name: "CRM integration (Zoho/HubSpot/Salesforce)", priceEur: 99, period: "/month", desc: "Connect your CRM" },
+  { name: "Featured listing in Vouch directory", priceEur: 99, period: "/month", desc: "Appear higher in search results" },
+];
+
 function InAppPricing({ onGetStarted }) {
-  const [cur, setCur] = useState(CURRENCIES_MAP.GB);
+  const [cur, setCur] = useState(CURRENCIES_MAP.EU);
   const [detected, setDetected] = useState(false);
+  const [annual, setAnnual] = useState(false);
 
   useEffect(() => {
     fetch("https://ipapi.co/json/", { signal: AbortSignal.timeout(4000) })
       .then(r => r.json())
       .then(d => {
         const code = EU_CODES.includes(d.country_code) ? "EU" : d.country_code;
-        setCur(CURRENCIES_MAP[code] || CURRENCIES_MAP.GB);
+        setCur(CURRENCIES_MAP[code] || CURRENCIES_MAP.EU);
         setDetected(true);
       }).catch(() => setDetected(true));
   }, []);
-
-  const plans = [
-    { id: "starter", name: "Starter", base: 497, popular: false, color: "var(--card)",
-      features: ["10 video testimonials / month", "Branded invite emails", "AI-generated prompts", "Basic captions & editing", "Email support"] },
-    { id: "growth", name: "Growth", base: 997, popular: true, color: "var(--ink)",
-      features: ["8 video testimonials / month", "Priority 5-day turnaround", "Social clips (3 formats)", "Custom branding & captions", "Follow-up sequences", "Slack support"] },
-    { id: "agency", name: "Agency", base: 1997, popular: false, color: "var(--card)",
-      features: ["Unlimited testimonials", "White-label platform", "Custom domain & branding", "Dedicated account manager", "Analytics dashboard", "Phone support"] },
-  ];
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--paper)", fontFamily: "DM Sans, sans-serif" }}>
@@ -2020,68 +2037,154 @@ function InAppPricing({ onGetStarted }) {
       </nav>
 
       {/* Hero */}
-      <div style={{ textAlign: "center", padding: "64px 24px 40px" }}>
-        <div style={{ display: "inline-block", padding: "5px 16px", borderRadius: 20, border: "1px solid var(--border)", background: "var(--cream)", fontSize: "0.75rem", color: "var(--muted)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 24 }}>
-          Simple pricing
+      <div style={{ textAlign: "center", padding: "64px 24px 48px" }}>
+        <div style={{ fontFamily: "Instrument Serif, serif", fontSize: "clamp(2.2rem, 6vw, 3.6rem)", lineHeight: 1.1, marginBottom: 14, letterSpacing: "-0.02em" }}>
+          The trust platform for<br /><em style={{ color: "var(--gold)", fontStyle: "italic" }}>modern businesses</em>
         </div>
-        <div style={{ fontFamily: "Instrument Serif, serif", fontSize: "clamp(2.2rem, 6vw, 3.8rem)", lineHeight: 1.1, marginBottom: 16, letterSpacing: "-0.02em" }}>
-          Testimonials that<br /><em style={{ color: "var(--gold)", fontStyle: "italic" }}>actually convert</em>
+        <div style={{ color: "var(--muted)", fontSize: "1.05rem", maxWidth: 420, margin: "0 auto 32px", lineHeight: 1.6 }}>
+          Record today. Polished video ready today.
         </div>
-        <div style={{ color: "var(--muted)", fontSize: "1rem", maxWidth: 480, margin: "0 auto 24px", lineHeight: 1.6 }}>
-          Done-for-you video testimonials. We collect, edit, and deliver — you publish.
+
+        {/* Monthly / Annual toggle */}
+        <div style={{ display: "inline-flex", alignItems: "center", gap: 12, background: "var(--cream)", border: "1px solid var(--border)", borderRadius: 99, padding: "5px 6px" }}>
+          <button onClick={() => setAnnual(false)} style={{
+            padding: "7px 20px", borderRadius: 99, border: "none", cursor: "pointer",
+            background: !annual ? "var(--ink)" : "transparent",
+            color: !annual ? "#fff" : "var(--muted)",
+            fontFamily: "DM Sans, sans-serif", fontWeight: 600, fontSize: "0.88rem", transition: "all 0.2s",
+          }}>Monthly</button>
+          <button onClick={() => setAnnual(true)} style={{
+            padding: "7px 20px", borderRadius: 99, border: "none", cursor: "pointer",
+            background: annual ? "var(--ink)" : "transparent",
+            color: annual ? "#fff" : "var(--muted)",
+            fontFamily: "DM Sans, sans-serif", fontWeight: 600, fontSize: "0.88rem", transition: "all 0.2s",
+            display: "flex", alignItems: "center", gap: 8,
+          }}>
+            Annual
+            <span style={{ background: "var(--gold)", color: "#fff", fontSize: "0.65rem", fontWeight: 700, padding: "2px 8px", borderRadius: 99, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+              Save 2 months
+            </span>
+          </button>
         </div>
-        <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "7px 16px", borderRadius: 20, background: "#fdf6e8", border: "1px solid #e8d4a8", color: "var(--gold)", fontSize: "0.82rem", fontWeight: 500 }}>
-          {cur.flag} Prices in {cur.symbol === "£" ? "GBP" : cur.symbol === "$" ? "USD" : cur.symbol === "€" ? "EUR" : "your currency"}
-          {!detected && " · detecting…"}
+
+        <div style={{ marginTop: 16, display: "flex", justifyContent: "center" }}>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "5px 14px", borderRadius: 20, background: "#fdf6e8", border: "1px solid #e8d4a8", color: "var(--gold)", fontSize: "0.8rem", fontWeight: 500 }}>
+            {cur.flag} Prices shown in {cur.symbol === "£" ? "GBP" : cur.symbol === "$" ? "USD" : cur.symbol === "€" ? "EUR" : "your currency"}
+            {!detected && " · detecting…"}
+          </div>
         </div>
       </div>
 
-      {/* Plans */}
-      <div style={{ maxWidth: 960, margin: "0 auto", padding: "0 20px 60px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16, alignItems: "start" }}>
-        {plans.map((p, i) => (
-          <div key={p.id} style={{
-            background: p.popular ? "var(--ink)" : "var(--card)",
-            border: p.popular ? "2px solid var(--gold)" : "1px solid var(--border)",
-            borderRadius: 18, overflow: "hidden",
-            transform: p.popular ? "scale(1.03)" : "none",
-            boxShadow: p.popular ? "0 12px 40px rgba(0,0,0,0.18)" : "none",
-          }}>
-            {p.popular && (
-              <div style={{ background: "var(--gold)", color: "#fff", textAlign: "center", padding: "7px", fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em" }}>
-                ✦ Most Popular
-              </div>
-            )}
-            <div style={{ padding: "28px 24px" }}>
-              <div style={{ fontSize: "0.72rem", fontWeight: 700, color: p.popular ? "#888" : "var(--muted)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>{p.name}</div>
-              <div style={{ fontFamily: "Instrument Serif, serif", fontSize: "2.8rem", fontWeight: 600, color: p.popular ? "#fff" : "var(--ink)", lineHeight: 1, marginBottom: 4 }}>
-                {fmtPrice(p.base, cur)}
-              </div>
-              <div style={{ fontSize: "0.8rem", color: p.popular ? "#666" : "var(--muted)", marginBottom: 20, paddingBottom: 20, borderBottom: `1px solid ${p.popular ? "#2a2a2a" : "var(--border)"}` }}>
-                per month
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 24 }}>
-                {p.features.map((f, fi) => (
-                  <div key={fi} style={{ display: "flex", gap: 10, alignItems: "flex-start", fontSize: "0.88rem", color: p.popular ? "#ccc" : "#333" }}>
-                    <span style={{ width: 18, height: 18, borderRadius: "50%", background: p.popular ? "#1e1e1e" : "var(--gold-pale, #fdf6e8)", color: "var(--gold)", fontSize: "0.62rem", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>✓</span>
-                    {f}
+      {/* Pricing heading */}
+      <div style={{ textAlign: "center", padding: "0 24px 32px" }}>
+        <div style={{ fontFamily: "Instrument Serif, serif", fontSize: "clamp(1.6rem, 4vw, 2.4rem)", lineHeight: 1.15, letterSpacing: "-0.02em", marginBottom: 8 }}>
+          Simple, transparent <em style={{ color: "var(--gold)", fontStyle: "italic" }}>pricing</em>
+        </div>
+        <div style={{ color: "var(--muted)", fontSize: "0.95rem" }}>No hidden fees. Cancel anytime.</div>
+      </div>
+
+      {/* Plan cards */}
+      <div style={{ maxWidth: 1120, margin: "0 auto", padding: "0 20px 20px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 14, alignItems: "start" }}>
+        {PRICING_PLANS.map(p => {
+          const dark = p.popular;
+          const displayPrice = fmtPrice(annual ? p.annualMonthlyEur : p.monthlyEur, cur);
+          const annualTotal = fmtPrice(p.annualTotalEur, cur);
+          const savings = fmtPrice(p.annualSavingsEur, cur);
+          return (
+            <div key={p.id} style={{
+              background: dark ? "var(--ink)" : "var(--card)",
+              border: dark ? "2px solid var(--gold)" : "1px solid var(--border)",
+              borderRadius: 18, overflow: "hidden",
+              transform: dark ? "scale(1.03)" : "none",
+              boxShadow: dark ? "0 12px 40px rgba(0,0,0,0.18)" : "none",
+              display: "flex", flexDirection: "column",
+            }}>
+              {dark && (
+                <div style={{ background: "var(--gold)", color: "#fff", textAlign: "center", padding: "7px", fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em" }}>
+                  ✦ Most Popular
+                </div>
+              )}
+              {!dark && p.aiEditing && (
+                <div style={{ background: "#fdf6e8", borderBottom: "1px solid var(--border)", textAlign: "center", padding: "6px", fontSize: "0.68rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--gold)" }}>
+                  ⚡ AI Editing Included
+                </div>
+              )}
+
+              <div style={{ padding: "24px 20px", flex: 1, display: "flex", flexDirection: "column" }}>
+                <div style={{ fontSize: "0.7rem", fontWeight: 700, color: dark ? "#888" : "var(--muted)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>{p.name}</div>
+                <div style={{ fontFamily: "Instrument Serif, serif", fontSize: "2.5rem", fontWeight: 600, color: dark ? "#fff" : "var(--ink)", lineHeight: 1, marginBottom: 2 }}>
+                  {displayPrice}
+                </div>
+                <div style={{ fontSize: "0.78rem", color: dark ? "#666" : "var(--muted)", marginBottom: 4 }}>
+                  {p.monthlyEur === 0 ? "forever free" : "per month"}
+                </div>
+                {annual && p.monthlyEur > 0 && (
+                  <div style={{ fontSize: "0.73rem", color: dark ? "#888" : "var(--muted)", marginBottom: 4 }}>
+                    Billed {annualTotal}/yr — <span style={{ color: "var(--gold)", fontWeight: 600 }}>save {savings}</span>
                   </div>
-                ))}
+                )}
+                {!annual && p.annualSavingsEur > 0 && (
+                  <div style={{ fontSize: "0.72rem", color: "var(--gold)", fontWeight: 500, marginBottom: 4 }}>
+                    Save {savings} with annual billing
+                  </div>
+                )}
+
+                <div style={{ height: 1, background: dark ? "#2a2a2a" : "var(--border)", margin: "14px 0" }} />
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 9, marginBottom: 20, flex: 1 }}>
+                  {p.features.map((f, fi) => (
+                    <div key={fi} style={{ display: "flex", gap: 9, alignItems: "flex-start", fontSize: "0.83rem", color: dark ? "#ccc" : "#333" }}>
+                      <span style={{ width: 16, height: 16, borderRadius: "50%", background: dark ? "#1e1e1e" : "#fdf6e8", color: "var(--gold)", fontSize: "0.55rem", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 2 }}>✓</span>
+                      {f}
+                    </div>
+                  ))}
+                </div>
+
+                {p.note && (
+                  <div style={{ fontSize: "0.74rem", color: dark ? "#666" : "var(--muted)", textAlign: "center", marginBottom: 10 }}>{p.note}</div>
+                )}
+                {dark && (
+                  <div style={{ textAlign: "center", marginBottom: 12 }}>
+                    <span style={{ display: "inline-block", background: "#1e1e1e", border: "1px solid #333", borderRadius: 99, padding: "3px 12px", fontSize: "0.67rem", fontWeight: 700, color: "var(--gold)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                      ⚡ AI Editing Included
+                    </span>
+                  </div>
+                )}
+
+                <button className="btn" style={{
+                  width: "100%", justifyContent: "center",
+                  background: dark ? "var(--gold)" : p.monthlyEur === 0 ? "transparent" : "var(--ink)",
+                  color: dark ? "#fff" : p.monthlyEur === 0 ? "var(--ink)" : "#fff",
+                  border: dark ? "none" : p.monthlyEur === 0 ? "1.5px solid var(--border)" : "none",
+                }} onClick={onGetStarted}>
+                  {p.cta}
+                </button>
               </div>
-              <button className="btn" style={{
-                width: "100%", justifyContent: "center",
-                background: p.popular ? "var(--gold)" : "transparent",
-                color: p.popular ? "#fff" : "var(--ink)",
-                border: p.popular ? "none" : "1.5px solid var(--border)",
-              }} onClick={onGetStarted}>
-                {p.id === "agency" ? "Talk to Us" : "Get Started"}
-              </button>
             </div>
-          </div>
-        ))}
+          );
+        })}
+      </div>
+
+      {/* Add-ons */}
+      <div style={{ maxWidth: 1120, margin: "40px auto 0", padding: "0 20px 20px" }}>
+        <div style={{ fontFamily: "Instrument Serif, serif", fontSize: "1.5rem", marginBottom: 6 }}>Enhance your plan</div>
+        <div style={{ color: "var(--muted)", fontSize: "0.88rem", marginBottom: 20 }}>Optional add-ons available on any paid plan.</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
+          {PRICING_ADDONS.map((a, i) => (
+            <div key={i} style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 14, padding: "18px 20px", display: "flex", flexDirection: "column", gap: 6 }}>
+              <div style={{ fontWeight: 600, fontSize: "0.9rem", color: "var(--ink)" }}>{a.name}</div>
+              <div style={{ fontSize: "0.8rem", color: "var(--muted)" }}>{a.desc}</div>
+              <div style={{ marginTop: 6, fontFamily: "Instrument Serif, serif", fontSize: "1.3rem", color: "var(--ink)" }}>
+                {fmtPrice(a.priceEur, cur)}<span style={{ fontFamily: "DM Sans, sans-serif", fontSize: "0.77rem", color: "var(--muted)", fontWeight: 400 }}>{a.period}</span>
+              </div>
+              <button className="btn btn-sm btn-outline" style={{ marginTop: 4, justifyContent: "center" }} onClick={onGetStarted}>Add on</button>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Guarantee */}
-      <div style={{ textAlign: "center", padding: "20px 24px 60px", color: "var(--muted)", fontSize: "0.85rem" }}>
+      <div style={{ textAlign: "center", padding: "40px 24px 60px", color: "var(--muted)", fontSize: "0.85rem" }}>
         🛡 30-day money-back guarantee · No contracts · Cancel anytime
       </div>
     </div>
