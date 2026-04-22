@@ -17,17 +17,12 @@
       --muted: #888;
     }
     body { background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-serif; min-height: 100vh; }
-    .serif { font-family: 'Instrument Serif', serif; }
 
-    /* ── Header / hero ── */
-    .profile-hero {
-      max-width: 780px; margin: 0 auto; padding: 64px 24px 40px;
-      text-align: center;
-    }
+    /* ── Header ── */
+    .profile-hero { max-width: 860px; margin: 0 auto; padding: 56px 24px 36px; text-align: center; }
     .profile-wordmark {
-      font-family: 'Instrument Serif', serif;
-      font-size: 1.1rem; color: var(--gold); letter-spacing: 0.04em;
-      margin-bottom: 48px; display: block;
+      font-family: 'Instrument Serif', serif; font-size: 1.1rem; color: var(--gold);
+      letter-spacing: 0.04em; margin-bottom: 44px; display: block;
     }
     .profile-avatar {
       width: 80px; height: 80px; border-radius: 50%;
@@ -36,7 +31,7 @@
       font-size: 2rem; font-weight: 700; color: #fff;
       margin: 0 auto 20px; font-family: 'Instrument Serif', serif;
     }
-    .profile-company { font-family: 'Instrument Serif', serif; font-size: 2rem; margin-bottom: 8px; }
+    .profile-company { font-family: 'Instrument Serif', serif; font-size: 2rem; margin-bottom: 10px; }
     .verified-badge {
       display: inline-flex; align-items: center; gap: 5px;
       background: #0d2e1a; border: 1px solid #2a6a3a; color: #6dbf8a;
@@ -44,14 +39,13 @@
       padding: 4px 12px; border-radius: 20px; text-transform: uppercase; margin-bottom: 32px;
     }
 
-    /* ── Score hero block ── */
+    /* ── Score block ── */
     .score-hero {
-      display: flex; align-items: center; justify-content: center; gap: 32px;
-      flex-wrap: wrap;
+      display: flex; align-items: center; justify-content: center; gap: 32px; flex-wrap: wrap;
       background: linear-gradient(135deg, #1a1710 0%, #141414 100%);
       border: 1px solid #c8a96e44; border-radius: 20px;
-      padding: 36px 40px; margin: 0 24px 48px; max-width: 780px;
-      margin-left: auto; margin-right: auto;
+      padding: 32px 40px; margin: 0 24px 48px;
+      max-width: 860px; margin-left: auto; margin-right: auto;
       position: relative; overflow: hidden;
     }
     .score-hero::before {
@@ -59,19 +53,10 @@
       background: radial-gradient(ellipse at top right, #c8a96e12 0%, transparent 65%);
       pointer-events: none;
     }
-    .score-big {
-      font-family: 'Instrument Serif', serif; font-size: 5rem; line-height: 1;
-      color: var(--gold);
-    }
+    .score-big { font-family: 'Instrument Serif', serif; font-size: 5rem; line-height: 1; color: var(--gold); }
     .score-star { font-size: 2.5rem; line-height: 1; }
-    .score-meta { text-align: left; }
-    .score-meta-title {
-      font-size: 0.7rem; font-weight: 700; color: var(--gold);
-      text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 6px;
-    }
+    .score-meta-title { font-size: 0.7rem; font-weight: 700; color: var(--gold); text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 6px; }
     .score-meta-count { font-size: 1rem; color: var(--muted); margin-bottom: 16px; }
-
-    /* ── Rating bar chart ── */
     .rating-bars { width: 200px; }
     .rating-row { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
     .rating-row-label { font-size: 0.78rem; color: var(--muted); width: 18px; text-align: right; flex-shrink: 0; }
@@ -79,47 +64,117 @@
     .rating-fill { height: 100%; background: var(--gold); border-radius: 4px; transition: width 0.6s ease; }
     .rating-row-count { font-size: 0.72rem; color: var(--muted); width: 16px; flex-shrink: 0; }
 
-    /* ── Testimonial grid ── */
-    .testimonials-section { max-width: 780px; margin: 0 auto; padding: 0 24px 64px; }
-    .section-heading {
-      font-family: 'Instrument Serif', serif; font-size: 1.5rem; margin-bottom: 24px;
+    /* ── Sections ── */
+    .section-wrap { max-width: 860px; margin: 0 auto; padding: 0 24px 56px; }
+    .section-heading { font-family: 'Instrument Serif', serif; font-size: 1.5rem; margin-bottom: 20px; }
+
+    /* ── Featured video ── */
+    .featured-video-wrap {
+      border-radius: 16px; overflow: hidden; background: #000;
+      position: relative; margin-bottom: 12px;
+      aspect-ratio: 16/9;
     }
+    .featured-video-wrap video { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .featured-caption {
+      background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+      padding: 16px 20px; display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 10px; margin-bottom: 48px;
+    }
+    .featured-name { font-weight: 700; font-size: 0.95rem; }
+    .featured-company { font-size: 0.8rem; color: var(--muted); margin-top: 2px; }
+    .featured-stars { color: var(--gold); font-size: 1rem; letter-spacing: 1px; }
+
+    /* ── Testimonial grid ── */
     .t-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
-    @media (max-width: 600px) { .t-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 620px) { .t-grid { grid-template-columns: 1fr; } }
+
     .t-card {
       background: var(--card); border: 1px solid var(--border); border-radius: 14px;
-      padding: 22px 24px; display: flex; flex-direction: column; gap: 12px;
+      overflow: hidden; display: flex; flex-direction: column; cursor: pointer;
+      transition: border-color 0.18s, transform 0.18s;
     }
-    .t-card-header { display: flex; align-items: center; justify-content: space-between; }
-    .t-card-name { font-weight: 700; font-size: 0.95rem; }
-    .t-card-company { font-size: 0.8rem; color: var(--muted); margin-top: 1px; }
-    .t-card-stars { color: var(--gold); font-size: 0.95rem; letter-spacing: 1px; }
-    .t-card-quote {
+    .t-card:hover { border-color: #c8a96e55; transform: translateY(-2px); }
+
+    /* Video thumbnail */
+    .t-thumb {
+      position: relative; background: #0a0a0a; aspect-ratio: 16/9;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .t-thumb-video { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .t-thumb-placeholder {
+      width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
+      background: linear-gradient(135deg, #141414 0%, #0e0e0e 100%);
+    }
+    .play-btn {
+      width: 52px; height: 52px; border-radius: 50%;
+      background: rgba(200,169,110,0.18); border: 2px solid rgba(200,169,110,0.5);
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.18s, transform 0.18s;
+    }
+    .t-card:hover .play-btn { background: rgba(200,169,110,0.35); transform: scale(1.08); }
+    .play-icon { color: var(--gold); font-size: 1.3rem; margin-left: 3px; line-height: 1; }
+
+    /* Card body */
+    .t-body { padding: 16px 18px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
+    .t-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+    .t-name { font-weight: 700; font-size: 0.92rem; line-height: 1.2; }
+    .t-company { font-size: 0.77rem; color: var(--muted); margin-top: 2px; }
+    .t-stars { color: var(--gold); font-size: 0.85rem; letter-spacing: 0.5px; flex-shrink: 0; }
+    .t-quote {
+      font-family: 'Instrument Serif', serif; font-size: 0.97rem; font-style: italic;
+      color: #bbb; line-height: 1.6;
+    }
+    .t-foot { display: flex; align-items: center; justify-content: space-between; margin-top: auto; padding-top: 4px; }
+    .t-verified {
+      font-size: 0.7rem; font-weight: 700; color: #6dbf8a;
+      display: flex; align-items: center; gap: 3px; letter-spacing: 0.04em;
+    }
+    .t-campaign { font-size: 0.72rem; color: #444; }
+
+    /* ── Video modal ── */
+    .vmodal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 1000;
+      display: flex; align-items: center; justify-content: center; padding: 16px;
+      animation: fadeIn 0.18s ease;
+    }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .vmodal {
+      background: #111; border: 1px solid #2a2a2a; border-radius: 18px;
+      width: 100%; max-width: 720px; overflow: hidden;
+      box-shadow: 0 32px 80px rgba(0,0,0,0.8);
+      animation: slideUp 0.2s ease;
+    }
+    @keyframes slideUp { from { transform: translateY(16px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    .vmodal-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 20px; border-bottom: 1px solid #1e1e1e;
+    }
+    .vmodal-name { font-weight: 700; font-size: 1rem; }
+    .vmodal-company { font-size: 0.8rem; color: var(--muted); margin-top: 2px; }
+    .vmodal-close {
+      width: 34px; height: 34px; border-radius: 50%; background: #1e1e1e; border: none;
+      color: #888; font-size: 1.1rem; cursor: pointer; display: flex; align-items: center;
+      justify-content: center; flex-shrink: 0; transition: background 0.15s, color 0.15s;
+    }
+    .vmodal-close:hover { background: #2a2a2a; color: #fff; }
+    .vmodal-video { width: 100%; background: #000; display: block; max-height: 60vh; }
+    .vmodal-footer { padding: 18px 20px; }
+    .vmodal-stars { color: var(--gold); font-size: 1.1rem; letter-spacing: 1px; margin-bottom: 8px; }
+    .vmodal-quote {
       font-family: 'Instrument Serif', serif; font-size: 1.05rem; font-style: italic;
       color: #ccc; line-height: 1.65;
     }
-    .t-card-campaign { font-size: 0.75rem; color: #555; margin-top: 4px; }
-
-    /* ── Pending state ── */
-    .pending-hero {
-      max-width: 500px; margin: 80px auto; text-align: center; padding: 0 24px;
-    }
-    .pending-hero-icon { font-size: 3rem; margin-bottom: 20px; }
-    .pending-hero-title { font-family: 'Instrument Serif', serif; font-size: 1.8rem; margin-bottom: 12px; }
-    .pending-hero-sub { color: var(--muted); font-size: 0.95rem; line-height: 1.6; }
-    .pending-progress { display: flex; gap: 6px; margin: 24px auto 0; width: 120px; }
-    .pending-pip { height: 5px; flex: 1; border-radius: 3px; }
-
-    /* ── Footer ── */
-    .profile-footer { text-align: center; padding: 32px 24px; color: #444; font-size: 0.8rem; }
-    .profile-footer a { color: var(--gold); text-decoration: none; }
 
     /* ── Loading skeleton ── */
     .skeleton { background: #1e1e1e; border-radius: 8px; animation: shimmer 1.4s infinite; }
-    @keyframes shimmer {
-      0%, 100% { opacity: 0.5; }
-      50%       { opacity: 1; }
-    }
+    @keyframes shimmer { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Pending / empty states ── */
+    .pending-hero { max-width: 500px; margin: 80px auto; text-align: center; padding: 0 24px; }
+    .pending-pip { height: 5px; flex: 1; border-radius: 3px; }
+    .profile-footer { text-align: center; padding: 32px 24px; color: #444; font-size: 0.8rem; }
+    .profile-footer a { color: var(--gold); text-decoration: none; }
   </style>
 </head>
 <body>
@@ -145,16 +200,31 @@
   </script>
 
   <script type="text/babel">
-    const { useState, useEffect } = React;
+    const { useState, useEffect, useRef } = React;
 
-    // ── Vouch Score ────────────────────────────────────────────────────────────
+    // ── Helpers ──────────────────────────────────────────────────────────────────
     function calcScore(approved) {
       if (approved.length < 3) return null;
       const sum = approved.reduce((s, t) => s + (Number(t.rating) || 0), 0);
       return Math.round((sum / approved.length) * 10) / 10;
     }
 
-    // ── Rating breakdown ───────────────────────────────────────────────────────
+    function firstVideoUrl(t) {
+      const urls = t.videoURLs || {};
+      const keys = Object.keys(urls).sort();
+      return keys.length > 0 ? urls[keys[0]] : null;
+    }
+
+    function Stars({ rating, size = "0.9rem" }) {
+      const r = Math.round(Number(rating) || 0);
+      return (
+        <span style={{ color: "var(--gold)", fontSize: size, letterSpacing: "1px" }}>
+          {"★".repeat(r)}{"☆".repeat(Math.max(0, 5 - r))}
+        </span>
+      );
+    }
+
+    // ── Rating bar chart ─────────────────────────────────────────────────────────
     function RatingBars({ approved }) {
       const total = approved.length || 1;
       return (
@@ -175,9 +245,202 @@
       );
     }
 
-    // ── Profile page ───────────────────────────────────────────────────────────
+    // ── Video modal ──────────────────────────────────────────────────────────────
+    function VideoModal({ testimonial, onClose }) {
+      const videoRef = useRef(null);
+      const url = firstVideoUrl(testimonial);
+
+      useEffect(() => {
+        const video = videoRef.current;
+        if (!video || !url) return;
+        video.src = url;
+        video.load();
+        video.play().catch(() => {});
+      }, [url]);
+
+      // Close on Escape
+      useEffect(() => {
+        function onKey(e) { if (e.key === "Escape") onClose(); }
+        window.addEventListener("keydown", onKey);
+        return () => window.removeEventListener("keydown", onKey);
+      }, [onClose]);
+
+      return (
+        <div className="vmodal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+          <div className="vmodal">
+            <div className="vmodal-header">
+              <div>
+                <div className="vmodal-name">{testimonial.clientName}</div>
+                {testimonial.clientCompany && (
+                  <div className="vmodal-company">{testimonial.clientCompany}</div>
+                )}
+              </div>
+              <button className="vmodal-close" onClick={onClose} aria-label="Close">✕</button>
+            </div>
+
+            {url ? (
+              <video
+                ref={videoRef}
+                className="vmodal-video"
+                controls
+                playsInline
+                crossOrigin="anonymous"
+                preload="metadata"
+              />
+            ) : (
+              <div style={{
+                background: "#0a0a0a", aspectRatio: "16/9",
+                display: "flex", alignItems: "center", justifyContent: "center", color: "#444",
+              }}>
+                No video available
+              </div>
+            )}
+
+            <div className="vmodal-footer">
+              <div className="vmodal-stars"><Stars rating={testimonial.rating} size="1.2rem" /></div>
+              {testimonial.quote && (
+                <div className="vmodal-quote">"{testimonial.quote}"</div>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ── Featured video (largest, most recent) ────────────────────────────────────
+    function FeaturedVideo({ testimonial }) {
+      const url = firstVideoUrl(testimonial);
+      const [tapToPlay, setTapToPlay] = useState(false);
+      const videoRef = useRef(null);
+
+      useEffect(() => {
+        const video = videoRef.current;
+        if (!video || !url) return;
+        video.src = url;
+        video.load();
+        video.play().catch(() => setTapToPlay(true));
+      }, [url]);
+
+      return (
+        <div className="section-wrap" style={{ paddingBottom: 0 }}>
+          <div className="section-heading">Featured testimonial</div>
+          <div className="featured-video-wrap">
+            {url ? (
+              <>
+                <video
+                  ref={videoRef}
+                  controls
+                  playsInline
+                  crossOrigin="anonymous"
+                  preload="metadata"
+                  style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                />
+                {tapToPlay && (
+                  <div
+                    onClick={() => { videoRef.current?.play().catch(() => {}); setTapToPlay(false); }}
+                    style={{
+                      position: "absolute", inset: 0, display: "flex", flexDirection: "column",
+                      alignItems: "center", justifyContent: "center",
+                      background: "rgba(0,0,0,0.55)", cursor: "pointer", gap: 10,
+                    }}>
+                    <div style={{
+                      width: 72, height: 72, borderRadius: "50%",
+                      background: "rgba(200,169,110,0.9)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                    }}>
+                      <svg width="32" height="32" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z"/></svg>
+                    </div>
+                    <span style={{ color: "#fff", fontSize: "0.9rem", fontWeight: 600 }}>Tap to play</span>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div style={{
+                position: "absolute", inset: 0, display: "flex", alignItems: "center",
+                justifyContent: "center", background: "#0a0a0a", color: "#333", fontSize: "0.9rem",
+              }}>
+                No video recorded
+              </div>
+            )}
+          </div>
+          <div className="featured-caption">
+            <div>
+              <div className="featured-name">{testimonial.clientName}</div>
+              {testimonial.clientCompany && <div className="featured-company">{testimonial.clientCompany}</div>}
+            </div>
+            <Stars rating={testimonial.rating} size="1.1rem" />
+          </div>
+        </div>
+      );
+    }
+
+    // ── Testimonial card ─────────────────────────────────────────────────────────
+    function TestimonialCard({ testimonial, onClick }) {
+      const url = firstVideoUrl(testimonial);
+
+      return (
+        <div className="t-card" onClick={onClick} role="button" tabIndex={0}
+          onKeyDown={e => e.key === "Enter" && onClick()}>
+          {/* Thumbnail */}
+          <div className="t-thumb">
+            {url ? (
+              <>
+                <video
+                  src={url}
+                  className="t-thumb-video"
+                  preload="metadata"
+                  playsInline
+                  muted
+                  // Seek to 1s to show a frame rather than a black first frame
+                  onLoadedMetadata={e => { try { e.target.currentTime = 1; } catch {} }}
+                />
+                <div style={{
+                  position: "absolute", inset: 0, display: "flex",
+                  alignItems: "center", justifyContent: "center",
+                  background: "rgba(0,0,0,0.3)",
+                }}>
+                  <div className="play-btn">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="var(--gold)"><path d="M8 5v14l11-7z"/></svg>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="t-thumb-placeholder">
+                <div className="play-btn">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="var(--gold)" style={{ opacity: 0.4 }}><path d="M8 5v14l11-7z"/></svg>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Body */}
+          <div className="t-body">
+            <div className="t-header">
+              <div>
+                <div className="t-name">{testimonial.clientName}</div>
+                {testimonial.clientCompany && <div className="t-company">{testimonial.clientCompany}</div>}
+              </div>
+              <Stars rating={testimonial.rating} />
+            </div>
+            {testimonial.quote && (
+              <div className="t-quote">"{testimonial.quote.length > 120 ? testimonial.quote.substring(0, 118) + "…" : testimonial.quote}"</div>
+            )}
+            <div className="t-foot">
+              <div className="t-verified">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="#6dbf8a"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                Verified
+              </div>
+              {testimonial.campaignName && (
+                <div className="t-campaign">{testimonial.campaignName}</div>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // ── Profile page ─────────────────────────────────────────────────────────────
     function ProfilePage() {
-      // Extract userId from the last path segment: /profile/{userId}
       const userId = window.location.pathname.split("/").filter(Boolean).pop() || null;
       console.log("[vouch/profile] pathname:", window.location.pathname, "| userId:", userId);
 
@@ -185,6 +448,7 @@
       const [notFound, setNotFound]         = useState(false);
       const [companyName, setCompanyName]   = useState("");
       const [testimonials, setTestimonials] = useState([]);
+      const [modalTarget, setModalTarget]   = useState(null);
 
       useEffect(() => {
         if (!userId) {
@@ -195,30 +459,19 @@
 
         const db   = firebase.firestore();
         const auth = firebase.auth();
+        let unsub  = () => {};
 
-        let unsub = () => {};
-
-        // Wait for anon auth to complete before opening any Firestore reads.
-        // If we query before auth resolves the rules see no auth token → permission-denied.
         auth.signInAnonymously()
-          .then(cred => {
-            console.log("[vouch/profile] anon auth uid:", cred.user.uid);
-            startListeners();
-          })
-          .catch(e => {
-            console.warn("[vouch/profile] anon auth failed:", e.message, "— trying without auth");
-            startListeners(); // rules allow read if status == "approved" regardless of auth
-          });
+          .then(cred => { console.log("[vouch/profile] anon auth uid:", cred.user.uid); startListeners(); })
+          .catch(e  => { console.warn("[vouch/profile] anon auth failed:", e.message, "— trying anyway"); startListeners(); });
 
         function startListeners() {
-          // Query only approved testimonials — matches the Firestore read rule exactly.
-          unsub = db
-            .collection("users").doc(userId)
+          unsub = db.collection("users").doc(userId)
             .collection("testimonials")
             .where("status", "==", "approved")
             .onSnapshot(snap => {
               const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-              console.log("[vouch/profile] testimonials snapshot — approved count:", all.length);
+              console.log("[vouch/profile] snapshot — approved:", all.length);
               setTestimonials(all);
               setLoading(false);
             }, err => {
@@ -226,51 +479,59 @@
               setNotFound(true); setLoading(false);
             });
 
-          // Company name: try user doc first; falls back to testimonials in the next effect.
           db.collection("users").doc(userId).get()
             .then(snap => {
               if (snap.exists) {
-                const data = snap.data();
-                const name = data.companyName || data.displayName || "";
+                const d = snap.data();
+                const name = d.companyName || d.displayName || "";
                 console.log("[vouch/profile] user doc companyName:", name || "(empty)");
                 if (name) setCompanyName(name);
               } else {
-                console.log("[vouch/profile] user doc not found — will derive name from testimonials");
+                console.log("[vouch/profile] user doc not found — deriving name from testimonials");
               }
             })
-            .catch(e => console.warn("[vouch/profile] user doc read failed:", e.code, e.message));
+            .catch(e => console.warn("[vouch/profile] user doc read:", e.code, e.message));
         }
 
         return () => unsub();
       }, []);
 
-      // Derive company name from campaigns if not on user doc
+      // Derive company name from testimonials if user doc doesn't have it
       useEffect(() => {
         if (companyName || testimonials.length === 0) return;
         const t = testimonials.find(t => t.companyName);
         if (t) setCompanyName(t.companyName);
       }, [testimonials, companyName]);
 
-      // testimonials state already contains only approved docs (filtered at query level)
-      const approved  = testimonials.filter(t => t.rating > 0);
+      // Sort by most recent; separate featured from grid
+      const approved = testimonials
+        .filter(t => t.rating > 0)
+        .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+      const featured  = approved[0] || null;
+      const gridItems = approved.slice(1);
       const score     = calcScore(approved);
       const initials  = (companyName || "V").substring(0, 2).toUpperCase();
 
+      // ── Loading ──
       if (loading) return (
-        <div style={{ maxWidth: 780, margin: "80px auto", padding: "0 24px" }}>
-          <div className="skeleton" style={{ height: 28, width: 120, margin: "0 auto 48px" }} />
-          <div className="skeleton" style={{ height: 220, borderRadius: 20, marginBottom: 40 }} />
+        <div style={{ maxWidth: 860, margin: "80px auto", padding: "0 24px" }}>
+          <div className="skeleton" style={{ height: 24, width: 100, margin: "0 auto 48px" }} />
+          <div className="skeleton" style={{ height: 200, borderRadius: 20, marginBottom: 40 }} />
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-            {[1,2,3,4].map(i => <div key={i} className="skeleton" style={{ height: 160, borderRadius: 14 }} />)}
+            {[1,2,3,4].map(i => <div key={i} className="skeleton" style={{ height: 220, borderRadius: 14 }} />)}
           </div>
         </div>
       );
 
+      // ── Not found ──
       if (notFound || !userId) return (
         <div className="pending-hero">
-          <div className="pending-hero-icon">🔍</div>
-          <div className="pending-hero-title">Profile not found</div>
-          <div className="pending-hero-sub">This Vouch profile doesn't exist or has been removed.</div>
+          <div style={{ fontSize: "3rem", marginBottom: 20 }}>🔍</div>
+          <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: "1.8rem", marginBottom: 12 }}>Profile not found</div>
+          <div style={{ color: "var(--muted)", fontSize: "0.95rem", lineHeight: 1.6 }}>
+            This Vouch profile doesn't exist or has been removed.
+          </div>
         </div>
       );
 
@@ -282,20 +543,18 @@
             <div className="profile-avatar">{initials}</div>
             <div className="profile-company">{companyName || "Business Profile"}</div>
             {score !== null && (
-              <div className="verified-badge">
-                <span>✓</span> Vouch Verified
-              </div>
+              <div className="verified-badge"><span>✓</span> Vouch Verified</div>
             )}
           </div>
 
-          {/* Score hero block */}
+          {/* Score block */}
           {score !== null ? (
             <div className="score-hero">
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                 <div className="score-big">{score.toFixed(1)}</div>
                 <div className="score-star">⭐</div>
               </div>
-              <div className="score-meta">
+              <div>
                 <div className="score-meta-title">✦ Vouch Score</div>
                 <div className="score-meta-count">
                   Based on {approved.length} verified testimonial{approved.length !== 1 ? "s" : ""}
@@ -303,62 +562,49 @@
                 <RatingBars approved={approved} />
               </div>
             </div>
-          ) : (
-            <div style={{ maxWidth: 780, margin: "0 auto 48px", padding: "0 24px" }}>
-              <div style={{
-                background: "#141414", border: "1px solid #222", borderRadius: 16,
-                padding: "32px 36px", textAlign: "center",
-              }}>
-                <div style={{ color: "#555", fontSize: "0.75rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>✦ Vouch Score</div>
-                <div style={{ fontFamily: "'Instrument Serif', serif", fontSize: "1.3rem", color: "#888", marginBottom: 10 }}>
-                  Score pending — need {Math.max(0, 3 - approved.length)} more verified testimonial{3 - approved.length !== 1 ? "s" : ""}
+          ) : approved.length > 0 && (
+            <div style={{ maxWidth: 860, margin: "0 auto 40px", padding: "0 24px" }}>
+              <div style={{ background: "#141414", border: "1px solid #222", borderRadius: 14, padding: "24px 28px", textAlign: "center" }}>
+                <div style={{ color: "#555", fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8 }}>✦ Vouch Score</div>
+                <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: "1.2rem", color: "#888", marginBottom: 10 }}>
+                  Score pending — {Math.max(0, 3 - approved.length)} more verified testimonial{3 - approved.length !== 1 ? "s" : ""} needed
                 </div>
-                <div className="pending-progress" style={{ margin: "0 auto" }}>
-                  {[0,1,2].map(i => (
-                    <div key={i} className="pending-pip" style={{ background: i < approved.length ? "#c8a96e" : "#2a2a2a" }} />
-                  ))}
+                <div style={{ display: "flex", gap: 6, width: 120, margin: "0 auto" }}>
+                  {[0,1,2].map(i => <div key={i} className="pending-pip" style={{ background: i < approved.length ? "#c8a96e" : "#2a2a2a" }} />)}
                 </div>
               </div>
             </div>
           )}
 
-          {/* Testimonials */}
-          <div className="testimonials-section">
-            {approved.length > 0 && (
-              <>
-                <div className="section-heading">What clients say</div>
-                <div className="t-grid">
-                  {approved.map(t => (
-                    <div key={t.id} className="t-card">
-                      <div>
-                        <div className="t-card-header">
-                          <div>
-                            <div className="t-card-name">{t.clientName}</div>
-                            {t.clientCompany && <div className="t-card-company">{t.clientCompany}</div>}
-                          </div>
-                          <div className="t-card-stars">
-                            {"★".repeat(Math.round(Number(t.rating) || 0))}
-                            {"☆".repeat(Math.max(0, 5 - Math.round(Number(t.rating) || 0)))}
-                          </div>
-                        </div>
-                      </div>
-                      {t.quote && <div className="t-card-quote">"{t.quote}"</div>}
-                      {t.campaignName && <div className="t-card-campaign">{t.campaignName}</div>}
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
+          {/* Featured video */}
+          {featured && <FeaturedVideo testimonial={featured} />}
 
-            {approved.length === 0 && (
-              <div style={{ textAlign: "center", padding: "60px 0", color: "#555" }}>
-                <div style={{ fontSize: "2.5rem", marginBottom: 16 }}>💬</div>
-                <div style={{ fontFamily: "'Instrument Serif', serif", fontSize: "1.3rem", color: "#888" }}>
-                  No approved testimonials yet
-                </div>
+          {/* Testimonial grid */}
+          {gridItems.length > 0 && (
+            <div className="section-wrap" style={{ paddingTop: 48 }}>
+              <div className="section-heading">What clients say</div>
+              <div className="t-grid">
+                {gridItems.map(t => (
+                  <TestimonialCard key={t.id} testimonial={t} onClick={() => setModalTarget(t)} />
+                ))}
               </div>
-            )}
-          </div>
+            </div>
+          )}
+
+          {/* Empty state */}
+          {approved.length === 0 && (
+            <div style={{ textAlign: "center", padding: "60px 24px", color: "#555" }}>
+              <div style={{ fontSize: "2.5rem", marginBottom: 16 }}>💬</div>
+              <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: "1.3rem", color: "#888" }}>
+                No approved testimonials yet
+              </div>
+            </div>
+          )}
+
+          {/* Video modal */}
+          {modalTarget && (
+            <VideoModal testimonial={modalTarget} onClose={() => setModalTarget(null)} />
+          )}
 
           <div className="profile-footer">
             Powered by <a href="https://vouchbusiness.com">Vouch</a>
