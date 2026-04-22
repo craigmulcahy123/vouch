@@ -5,7 +5,7 @@ const admin  = require("firebase-admin");
 const ffmpeg = require("fluent-ffmpeg");
 const ffmpegPath = require("@ffmpeg-installer/ffmpeg").path;
 const fetch  = require("node-fetch");
-const Anthropic = require("@anthropic-ai/sdk");
+const { Anthropic } = require("@anthropic-ai/sdk");
 const { Resend } = require("resend");
 const os   = require("os");
 const path = require("path");
@@ -16,6 +16,16 @@ ffmpeg.setFfmpegPath(ffmpegPath);
 
 const db      = admin.firestore();
 const storage = admin.storage();
+
+// Clients are instantiated lazily inside the handler so that secrets are
+// resolved from process.env at call time (Firebase Functions v2 populates
+// secrets into process.env only after the function is invoked).
+function getAnthropic() {
+  return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+}
+function getResend() {
+  return new Resend(process.env.RESEND_API_KEY);
+}
 
 // ── processTestimonial ────────────────────────────────────────────────────────
 // Fires whenever a new testimonial document is written to Firestore.
@@ -107,7 +117,7 @@ exports.processTestimonial = onDocumentCreated(
       }
 
       // ── 6. Extract audio and transcribe with Claude ──────────────────────
-      const anthropic   = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+      const anthropic   = getAnthropic();
       const transcripts = {};
 
       for (const [qIdx, localPath] of Object.entries(localVideos)) {
@@ -387,7 +397,7 @@ function processVideoFormat({ inputPath, outputPath, startSec, duration, width, 
 
 /** Send the two completion emails via Resend. */
 async function sendCompletionEmails({ ownerEmail, clientEmail, data, companyName, processedVideoURLs }) {
-  const resend      = new Resend(process.env.RESEND_API_KEY);
+  const resend      = getResend();
   const clientName  = data.clientName || "Your client";
   const displayComp = companyName || "your company";
 

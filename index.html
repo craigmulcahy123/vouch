@@ -364,13 +364,32 @@ const style = `
   .dash-subtitle { color: var(--muted); font-size: 0.95rem; }
 
   /* Stats row */
-  .stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 40px; }
+  .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 40px; }
   .stat-card {
     background: var(--card); border: 1px solid var(--border); border-radius: 14px;
     padding: 24px 28px;
   }
+  .stat-card.score-card {
+    border-color: #c8a96e55;
+    background: linear-gradient(135deg, #1a1710 0%, #111 100%);
+    position: relative; overflow: hidden;
+  }
+  .stat-card.score-card::before {
+    content: ''; position: absolute; inset: 0;
+    background: radial-gradient(ellipse at top right, #c8a96e18 0%, transparent 60%);
+    pointer-events: none;
+  }
   .stat-num { font-family: 'Instrument Serif', serif; font-size: 2.6rem; line-height: 1; margin-bottom: 4px; }
+  .stat-num.score-num { font-size: 2.8rem; color: #c8a96e; }
   .stat-label { color: var(--muted); font-size: 0.82rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.06em; }
+  .score-pending { font-size: 0.8rem; color: #888; font-style: italic; line-height: 1.4; margin-top: 2px; }
+  .score-share-btn {
+    margin-top: 10px; padding: 5px 12px; font-size: 0.74rem; font-weight: 600;
+    background: transparent; border: 1px solid #c8a96e66; color: #c8a96e;
+    border-radius: 6px; cursor: pointer; letter-spacing: 0.04em;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .score-share-btn:hover { background: #c8a96e22; border-color: #c8a96e; }
 
   /* Campaign creator */
   .section-title { font-family: 'Instrument Serif', serif; font-size: 1.5rem; margin-bottom: 20px; }
@@ -846,7 +865,8 @@ const style = `
     .nav { padding: 14px 20px; }
     .dashboard { padding: 28px 20px; }
     .form-row { grid-template-columns: 1fr; }
-    .stats-row { grid-template-columns: 1fr; }
+    .stats-row { grid-template-columns: repeat(2, 1fr); }
+    .stats-row .score-card { grid-column: 1 / -1; }
     .dash-title { font-size: 2rem; }
   }
 
@@ -3055,20 +3075,69 @@ function Dashboard({ onPreview, userId, db, onUpgrade }) {
         <div className="dash-subtitle">Manage campaigns and review incoming testimonials</div>
       </div>
 
-      <div className="stats-row">
-        <div className="stat-card">
-          <div className="stat-num serif">{campaigns.length}</div>
-          <div className="stat-label">Active Campaigns</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-num serif">{testimonials.length}</div>
-          <div className="stat-label">Testimonials Received</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-num serif">{testimonials.filter(t => t.status === "approved").length}</div>
-          <div className="stat-label">Approved & Ready</div>
-        </div>
-      </div>
+      {(() => {
+        const approved = testimonials.filter(t => t.status === "approved");
+        const approvedCount = approved.length;
+        const vouchScore = approvedCount >= 3
+          ? Math.round((approved.reduce((sum, t) => sum + (Number(t.rating) || 0), 0) / approvedCount) * 10) / 10
+          : null;
+        const profileUrl = `https://vouchbusiness.com/profile/${userId}`;
+        const [scoreCopied, setScoreCopied] = React.useState(false);
+        function shareScore() {
+          navigator.clipboard.writeText(profileUrl).catch(() => {});
+          setScoreCopied(true);
+          setTimeout(() => setScoreCopied(false), 2000);
+        }
+        return (
+          <div className="stats-row">
+            <div className="stat-card">
+              <div className="stat-num serif">{campaigns.length}</div>
+              <div className="stat-label">Active Campaigns</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-num serif">{testimonials.length}</div>
+              <div className="stat-label">Received</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-num serif">{approvedCount}</div>
+              <div className="stat-label">Approved</div>
+            </div>
+            <div className="stat-card score-card">
+              {vouchScore !== null ? (
+                <>
+                  <div style={{ fontSize: "0.7rem", fontWeight: 700, color: "#c8a96e", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>
+                    ✦ Vouch Score
+                  </div>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+                    <div className="stat-num score-num">{vouchScore.toFixed(1)}</div>
+                    <div style={{ fontSize: "1.4rem", lineHeight: 1 }}>⭐</div>
+                  </div>
+                  <div style={{ fontSize: "0.78rem", color: "#888", marginTop: 2 }}>
+                    from {approvedCount} verified testimonial{approvedCount !== 1 ? "s" : ""}
+                  </div>
+                  <button className="score-share-btn" onClick={shareScore}>
+                    {scoreCopied ? "✓ Copied!" : "Share my score →"}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize: "0.7rem", fontWeight: 700, color: "#c8a96e", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>
+                    ✦ Vouch Score
+                  </div>
+                  <div className="score-pending">
+                    Approve {Math.max(0, 3 - approvedCount)} more testimonial{3 - approvedCount !== 1 ? "s" : ""} to unlock your score
+                  </div>
+                  <div style={{ marginTop: 8, display: "flex", gap: 4 }}>
+                    {[0,1,2].map(i => (
+                      <div key={i} style={{ height: 4, flex: 1, borderRadius: 2, background: i < approvedCount ? "#c8a96e" : "#2a2a2a" }} />
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       <div className="tabs-inner">
         {[["campaigns","📋 Campaigns"],["testimonials","⭐ Testimonials"],["invites","📬 Invites"],["billing","💳 Plan & Billing"]].map(([key, label]) => (
