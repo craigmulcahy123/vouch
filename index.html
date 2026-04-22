@@ -2497,9 +2497,55 @@ function VideoEditor({ testimonial, onClose }) {
 // ── Video Playback Modal ──────────────────────────────────────────────────────
 function VideoPlaybackModal({ testimonial, onClose }) {
   const videoURLs = testimonial.videoURLs || {};
-  const keys = Object.keys(videoURLs);
+  const keys      = Object.keys(videoURLs);
+  const prompts   = testimonial.prompts || [];
+
   const [activeIdx, setActiveIdx] = useState(keys[0] || null);
-  const prompts = testimonial.prompts || [];
+  const [tapToPlay, setTapToPlay] = useState(false); // true when autoplay was blocked
+  const [canPlay, setCanPlay]     = useState(false);  // true once video is decodeable
+  const [errored, setErrored]     = useState(false);
+
+  const videoRef = useRef(null);
+
+  // When the active clip changes, reload the video and attempt autoplay
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !activeIdx || !videoURLs[activeIdx]) return;
+
+    setTapToPlay(false);
+    setCanPlay(false);
+    setErrored(false);
+
+    // Set src directly — avoid blob URLs on iOS (they can fail cross-origin)
+    video.src = videoURLs[activeIdx];
+    video.load();
+    video.play().catch(() => {
+      // Autoplay blocked (common on iOS when no prior user gesture on THIS element)
+      setTapToPlay(true);
+    });
+  }, [activeIdx]);
+
+  // Hide tap-to-play once the video is actually playing
+  function handlePlaying() {
+    setTapToPlay(false);
+    setCanPlay(true);
+  }
+
+  function handleCanPlay() {
+    setCanPlay(true);
+  }
+
+  function handleError() {
+    setErrored(true);
+    setTapToPlay(false);
+  }
+
+  function handleTap() {
+    const video = videoRef.current;
+    if (!video) return;
+    video.play().catch(() => {});
+    setTapToPlay(false);
+  }
 
   if (keys.length === 0) return null;
 
@@ -2518,16 +2564,73 @@ function VideoPlaybackModal({ testimonial, onClose }) {
             {keys.map(idx => (
               <button key={idx} className={`video-clip-tab ${activeIdx === idx ? "active" : ""}`}
                 onClick={() => setActiveIdx(idx)}>
-                Q{Number(idx)+1}
-                {prompts[idx] && <span style={{ display: "block", fontSize: "0.72rem", opacity: 0.7, maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{prompts[idx]}</span>}
+                Q{Number(idx) + 1}
+                {prompts[idx] && (
+                  <span style={{ display: "block", fontSize: "0.72rem", opacity: 0.7, maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {prompts[idx]}
+                  </span>
+                )}
               </button>
             ))}
           </div>
         )}
 
+        {/* Video player — wrapper keeps tap-to-play overlay positioned correctly */}
         {activeIdx !== null && videoURLs[activeIdx] && (
-          <video key={activeIdx} src={videoURLs[activeIdx]} controls autoPlay
-            style={{ width: "100%", borderRadius: 10, background: "#000" }} />
+          <div style={{ position: "relative", borderRadius: 10, overflow: "hidden", background: "#000" }}>
+            <video
+              ref={videoRef}
+              controls
+              playsInline          /* required for iOS inline playback */
+              crossOrigin="anonymous"
+              preload="metadata"
+              onPlaying={handlePlaying}
+              onCanPlay={handleCanPlay}
+              onError={handleError}
+              style={{ width: "100%", display: "block" }}
+            />
+
+            {/* Tap-to-play overlay — shown when autoplay is blocked */}
+            {tapToPlay && !errored && (
+              <div
+                onClick={handleTap}
+                style={{
+                  position: "absolute", inset: 0,
+                  display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                  background: "rgba(0,0,0,0.55)", cursor: "pointer", gap: 10,
+                }}>
+                <div style={{
+                  width: 64, height: 64, borderRadius: "50%",
+                  background: "rgba(200,169,110,0.9)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="#fff">
+                    <path d="M8 5v14l11-7z"/>
+                  </svg>
+                </div>
+                <span style={{ color: "#fff", fontSize: "0.9rem", fontWeight: 600, letterSpacing: "0.04em" }}>
+                  Tap to play
+                </span>
+              </div>
+            )}
+
+            {/* Error state */}
+            {errored && (
+              <div style={{
+                position: "absolute", inset: 0, display: "flex", flexDirection: "column",
+                alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.7)", gap: 10,
+              }}>
+                <div style={{ fontSize: "2rem" }}>⚠️</div>
+                <div style={{ color: "#e07a7a", fontSize: "0.88rem", textAlign: "center", padding: "0 24px" }}>
+                  Video could not be loaded.
+                </div>
+                <a href={videoURLs[activeIdx]} target="_blank" rel="noopener noreferrer"
+                  style={{ color: "#c8a96e", fontSize: "0.82rem", textDecoration: "underline" }}>
+                  Open in new tab
+                </a>
+              </div>
+            )}
+          </div>
         )}
 
         {prompts[activeIdx] && (
