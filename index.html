@@ -3081,7 +3081,7 @@ function Dashboard({ onPreview, userId, db, onUpgrade }) {
         const vouchScore = approvedCount >= 3
           ? Math.round((approved.reduce((sum, t) => sum + (Number(t.rating) || 0), 0) / approvedCount) * 10) / 10
           : null;
-        const profileUrl = `https://vouchbusiness.com/profile/${userId}`;
+        const profileUrl = `${window.location.origin}/profile/${userId}`;
         const [scoreCopied, setScoreCopied] = React.useState(false);
         function shareScore() {
           navigator.clipboard.writeText(profileUrl).catch(() => {});

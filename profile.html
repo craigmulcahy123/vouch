@@ -177,9 +177,9 @@
 
     // ── Profile page ───────────────────────────────────────────────────────────
     function ProfilePage() {
-      // Extract userId from URL: /profile/{userId}
-      const pathParts = window.location.pathname.split("/").filter(Boolean);
-      const userId = pathParts[pathParts.length - 1] || null;
+      // Extract userId from the last path segment: /profile/{userId}
+      const userId = window.location.pathname.split("/").filter(Boolean).pop() || null;
+      console.log("[vouch/profile] pathname:", window.location.pathname, "| userId:", userId);
 
       const [loading, setLoading]           = useState(true);
       const [notFound, setNotFound]         = useState(false);
@@ -187,13 +187,19 @@
       const [testimonials, setTestimonials] = useState([]);
 
       useEffect(() => {
-        if (!userId) { setNotFound(true); setLoading(false); return; }
+        if (!userId) {
+          console.warn("[vouch/profile] no userId in URL — showing not found");
+          setNotFound(true); setLoading(false); return;
+        }
+        console.log("[vouch/profile] loading Firestore data for userId:", userId);
 
         const db   = firebase.firestore();
         const auth = firebase.auth();
 
         // Sign in anonymously so Firestore rules (request.auth != null) pass
-        auth.signInAnonymously().catch(() => {});
+        auth.signInAnonymously()
+          .then(cred => console.log("[vouch/profile] anon auth uid:", cred.user.uid))
+          .catch(e => console.warn("[vouch/profile] anon auth failed:", e.message));
 
         // Watch approved testimonials in real time
         const unsub = db
@@ -201,9 +207,14 @@
           .collection("testimonials")
           .onSnapshot(snap => {
             const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            console.log("[vouch/profile] testimonials snapshot — count:", all.length,
+              "| approved:", all.filter(t => t.status === "approved").length);
             setTestimonials(all);
             setLoading(false);
-          }, () => { setNotFound(true); setLoading(false); });
+          }, err => {
+            console.error("[vouch/profile] snapshot error:", err.code, err.message);
+            setNotFound(true); setLoading(false);
+          });
 
         // Fetch company name from user doc (stored when campaigns are saved)
         db.collection("users").doc(userId).get().then(snap => {
