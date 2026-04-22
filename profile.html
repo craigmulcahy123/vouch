@@ -196,33 +196,50 @@
         const db   = firebase.firestore();
         const auth = firebase.auth();
 
-        // Sign in anonymously so Firestore rules (request.auth != null) pass
-        auth.signInAnonymously()
-          .then(cred => console.log("[vouch/profile] anon auth uid:", cred.user.uid))
-          .catch(e => console.warn("[vouch/profile] anon auth failed:", e.message));
+        let unsub = () => {};
 
-        // Watch approved testimonials in real time
-        const unsub = db
-          .collection("users").doc(userId)
-          .collection("testimonials")
-          .onSnapshot(snap => {
-            const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-            console.log("[vouch/profile] testimonials snapshot — count:", all.length,
-              "| approved:", all.filter(t => t.status === "approved").length);
-            setTestimonials(all);
-            setLoading(false);
-          }, err => {
-            console.error("[vouch/profile] snapshot error:", err.code, err.message);
-            setNotFound(true); setLoading(false);
+        // Wait for anon auth to complete before opening any Firestore reads.
+        // If we query before auth resolves the rules see no auth token → permission-denied.
+        auth.signInAnonymously()
+          .then(cred => {
+            console.log("[vouch/profile] anon auth uid:", cred.user.uid);
+            startListeners();
+          })
+          .catch(e => {
+            console.warn("[vouch/profile] anon auth failed:", e.message, "— trying without auth");
+            startListeners(); // rules allow read if status == "approved" regardless of auth
           });
 
-        // Fetch company name from user doc (stored when campaigns are saved)
-        db.collection("users").doc(userId).get().then(snap => {
-          if (snap.exists) {
-            const data = snap.data();
-            setCompanyName(data.companyName || data.displayName || "");
-          }
-        }).catch(() => {});
+        function startListeners() {
+          // Query only approved testimonials — matches the Firestore read rule exactly.
+          unsub = db
+            .collection("users").doc(userId)
+            .collection("testimonials")
+            .where("status", "==", "approved")
+            .onSnapshot(snap => {
+              const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+              console.log("[vouch/profile] testimonials snapshot — approved count:", all.length);
+              setTestimonials(all);
+              setLoading(false);
+            }, err => {
+              console.error("[vouch/profile] snapshot error:", err.code, err.message);
+              setNotFound(true); setLoading(false);
+            });
+
+          // Company name: try user doc first; falls back to testimonials in the next effect.
+          db.collection("users").doc(userId).get()
+            .then(snap => {
+              if (snap.exists) {
+                const data = snap.data();
+                const name = data.companyName || data.displayName || "";
+                console.log("[vouch/profile] user doc companyName:", name || "(empty)");
+                if (name) setCompanyName(name);
+              } else {
+                console.log("[vouch/profile] user doc not found — will derive name from testimonials");
+              }
+            })
+            .catch(e => console.warn("[vouch/profile] user doc read failed:", e.code, e.message));
+        }
 
         return () => unsub();
       }, []);
@@ -234,7 +251,8 @@
         if (t) setCompanyName(t.companyName);
       }, [testimonials, companyName]);
 
-      const approved  = testimonials.filter(t => t.status === "approved" && t.rating > 0);
+      // testimonials state already contains only approved docs (filtered at query level)
+      const approved  = testimonials.filter(t => t.rating > 0);
       const score     = calcScore(approved);
       const initials  = (companyName || "V").substring(0, 2).toUpperCase();
 
