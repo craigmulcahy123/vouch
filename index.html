@@ -3081,7 +3081,7 @@ function Dashboard({ onPreview, userId, db, onUpgrade }) {
         const vouchScore = approvedCount >= 3
           ? Math.round((approved.reduce((sum, t) => sum + (Number(t.rating) || 0), 0) / approvedCount) * 10) / 10
           : null;
-        const profileUrl = `${window.location.origin}/profile/${userId}`;
+        const profileUrl = `https://vouchbusiness.com/profile/${userId}`;
         const [scoreCopied, setScoreCopied] = React.useState(false);
         function shareScore() {
           navigator.clipboard.writeText(profileUrl).catch(() => {});
@@ -3115,9 +3115,15 @@ function Dashboard({ onPreview, userId, db, onUpgrade }) {
                   <div style={{ fontSize: "0.78rem", color: "#888", marginTop: 2 }}>
                     from {approvedCount} verified testimonial{approvedCount !== 1 ? "s" : ""}
                   </div>
-                  <button className="score-share-btn" onClick={shareScore}>
-                    {scoreCopied ? "✓ Copied!" : "Share my score →"}
-                  </button>
+                  <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
+                    <button className="score-share-btn" style={{ marginTop: 0 }} onClick={shareScore}>
+                      {scoreCopied ? "✓ Copied!" : "Copy link"}
+                    </button>
+                    <button className="score-share-btn" style={{ marginTop: 0 }}
+                      onClick={() => window.open(`https://vouchbusiness.com/profile/${userId}`, "_blank")}>
+                      View profile →
+                    </button>
+                  </div>
                 </>
               ) : (
                 <>
