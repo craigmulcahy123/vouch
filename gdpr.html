@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GDPR Rights — Vouch</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root { --gold: #c8a96e; --bg: #f5f0e8; --card: #ede8df; --border: #ddd7cb; --ink: #1a1a1a; --muted: #7a7060; }
+    body { background: var(--bg); color: var(--ink); font-family: 'DM Sans', sans-serif; line-height: 1.7; }
+    a { color: var(--gold); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .nav { max-width: 760px; margin: 0 auto; padding: 32px 24px 0; display: flex; align-items: center; justify-content: space-between; }
+    .nav-logo { font-family: 'Instrument Serif', serif; font-size: 1.1rem; color: var(--gold); }
+    .nav-back { font-size: 0.85rem; color: var(--muted); }
+
+    .content { max-width: 760px; margin: 0 auto; padding: 48px 24px 80px; }
+    .doc-title { font-family: 'Instrument Serif', serif; font-size: 2.4rem; margin-bottom: 8px; color: var(--ink); }
+    .doc-meta { color: var(--muted); font-size: 0.85rem; margin-bottom: 32px; }
+
+    h2 { font-family: 'Instrument Serif', serif; font-size: 1.3rem; font-weight: 400; margin: 36px 0 12px; color: var(--ink); }
+    p { color: #4a4035; margin-bottom: 14px; }
+    ul { color: #4a4035; padding-left: 20px; margin-bottom: 14px; }
+    ul li { margin-bottom: 8px; }
+    strong { color: var(--ink); }
+
+    .highlight-box {
+      background: #ede8df; border: 1px solid #c8a96e55; border-left: 3px solid var(--gold); border-radius: 8px;
+      padding: 18px 22px; margin-bottom: 32px;
+    }
+    .highlight-box p { margin-bottom: 0; }
+
+    .rights-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 36px; }
+    @media (max-width: 540px) { .rights-grid { grid-template-columns: 1fr; } }
+    .right-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; }
+    .right-card h3 { font-family: 'Instrument Serif', serif; font-size: 1rem; font-weight: 400; color: var(--ink); margin-bottom: 6px; }
+    .right-card p { font-size: 0.88rem; margin-bottom: 0; }
+
+    /* Request form */
+    .form-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 32px; margin-top: 36px; }
+    .form-card h2 { margin-top: 0; }
+    .form-row { margin-bottom: 20px; }
+    label { display: block; font-size: 0.88rem; font-weight: 600; color: var(--ink); margin-bottom: 6px; }
+    input, select, textarea {
+      width: 100%; padding: 10px 14px; border: 1px solid var(--border);
+      border-radius: 8px; background: var(--bg); color: var(--ink);
+      font-family: 'DM Sans', sans-serif; font-size: 0.95rem;
+      transition: border-color 0.15s;
+    }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: var(--gold); }
+    textarea { resize: vertical; min-height: 120px; }
+    .form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 540px) { .form-row-2 { grid-template-columns: 1fr; } }
+
+    .submit-btn {
+      display: inline-block; padding: 12px 28px; background: var(--gold); color: #1a1a1a;
+      font-family: 'DM Sans', sans-serif; font-size: 0.95rem; font-weight: 600;
+      border: none; border-radius: 8px; cursor: pointer; transition: opacity 0.15s;
+    }
+    .submit-btn:hover { opacity: 0.88; }
+
+    .response-note { font-size: 0.82rem; color: var(--muted); margin-top: 12px; }
+
+    .footer { text-align: center; padding: 32px 24px; color: var(--muted); font-size: 0.8rem; border-top: 1px solid var(--border); }
+  </style>
+</head>
+<body>
+  <nav class="nav">
+    <a class="nav-logo" href="/">✦ Vouch</a>
+    <a class="nav-back" href="/">← Back to Vouch</a>
+  </nav>
+
+  <div class="content">
+    <h1 class="doc-title">Your Data Rights</h1>
+    <p class="doc-meta">GDPR Rights &nbsp;·&nbsp; Last updated: April 2026</p>
+
+    <div class="highlight-box">
+      <p>Under the General Data Protection Regulation (GDPR), you have rights over the personal data we hold about you. This page explains those rights and lets you submit a request directly to our team. We are based in Ireland and act as data controller for account and usage data.</p>
+    </div>
+
+    <h2>Rights You Have Under GDPR</h2>
+
+    <div class="rights-grid">
+      <div class="right-card">
+        <h3>Right of Access</h3>
+        <p>Request a copy of the personal data we hold about you, including what it is and how it is used.</p>
+      </div>
+      <div class="right-card">
+        <h3>Right to Erasure</h3>
+        <p>Ask us to delete your personal data ("right to be forgotten") where there is no overriding reason to keep it.</p>
+      </div>
+      <div class="right-card">
+        <h3>Right to Portability</h3>
+        <p>Receive your data in a structured, machine-readable format so you can transfer it to another service.</p>
+      </div>
+      <div class="right-card">
+        <h3>Right to Rectification</h3>
+        <p>Request correction of any inaccurate or incomplete personal data we hold about you.</p>
+      </div>
+      <div class="right-card">
+        <h3>Right to Restriction</h3>
+        <p>Ask us to pause processing of your data in certain circumstances, for example while a dispute is resolved.</p>
+      </div>
+      <div class="right-card">
+        <h3>Right to Object</h3>
+        <p>Object to processing of your personal data where we rely on legitimate interests as the legal basis.</p>
+      </div>
+    </div>
+
+    <p>We will respond to all requests within <strong>30 days</strong>. We may need to verify your identity before fulfilling your request. There is no charge for submitting a request.</p>
+
+    <p>If you are not satisfied with our response you have the right to lodge a complaint with the Irish Data Protection Commission at <a href="https://www.dataprotection.ie" target="_blank" rel="noopener">dataprotection.ie</a>.</p>
+
+    <div class="form-card">
+      <h2>Submit a Data Request</h2>
+      <p style="margin-bottom: 24px;">Complete the form below and your request will be sent directly to our privacy team.</p>
+
+      <form id="gdpr-form">
+        <div class="form-row-2">
+          <div class="form-row" style="margin-bottom:0">
+            <label for="req-name">Full name</label>
+            <input type="text" id="req-name" name="name" placeholder="Your full name" required />
+          </div>
+          <div class="form-row" style="margin-bottom:0">
+            <label for="req-email">Email address</label>
+            <input type="email" id="req-email" name="email" placeholder="you@example.com" required />
+          </div>
+        </div>
+
+        <div class="form-row" style="margin-top: 20px;">
+          <label for="req-type">Request type</label>
+          <select id="req-type" name="type" required>
+            <option value="" disabled selected>Select request type…</option>
+            <option value="access">Access — send me a copy of my data</option>
+            <option value="erasure">Erasure — delete my personal data</option>
+            <option value="portability">Portability — export my data in machine-readable format</option>
+            <option value="rectification">Rectification — correct my personal data</option>
+            <option value="restriction">Restriction — restrict processing of my data</option>
+            <option value="objection">Objection — object to processing</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+
+        <div class="form-row">
+          <label for="req-message">Additional details <span style="font-weight:400; color: var(--muted)">(optional)</span></label>
+          <textarea id="req-message" name="message" placeholder="Provide any additional context to help us process your request…"></textarea>
+        </div>
+
+        <button type="submit" class="submit-btn">Send Request</button>
+        <p class="response-note">We will respond within 30 days. Your request is sent securely to hello@vouchbusiness.com.</p>
+      </form>
+    </div>
+  </div>
+
+  <footer class="footer">
+    &copy; 2026 Vouch &nbsp;·&nbsp;
+    <a href="/terms">Terms</a> &nbsp;·&nbsp;
+    <a href="/privacy">Privacy</a> &nbsp;·&nbsp;
+    <a href="/gdpr">GDPR</a>
+  </footer>
+
+  <script>
+    document.getElementById('gdpr-form').addEventListener('submit', function(e) {
+      e.preventDefault();
+      var name    = document.getElementById('req-name').value.trim();
+      var email   = document.getElementById('req-email').value.trim();
+      var type    = document.getElementById('req-type').value;
+      var message = document.getElementById('req-message').value.trim();
+
+      var subject = encodeURIComponent('GDPR Data Request: ' + type);
+      var body    = encodeURIComponent(
+        'Name: ' + name + '\n' +
+        'Email: ' + email + '\n' +
+        'Request type: ' + type + '\n\n' +
+        (message ? 'Details:\n' + message : '')
+      );
+
+      window.location.href = 'mailto:hello@vouchbusiness.com?subject=' + subject + '&body=' + body;
+    });
+  </script>
+</body>
+</html>
