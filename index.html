@@ -3811,10 +3811,11 @@ const PRICING_ADDONS = [
   { name: "Featured listing in Vouch directory", priceEur: 99, period: "/month", desc: "Appear higher in search results" },
 ];
 
-function InAppPricing({ onGetStarted }) {
+function InAppPricing({ onGetStarted, activeUser }) {
   const [cur, setCur] = useState(CURRENCIES_MAP.EU);
   const [detected, setDetected] = useState(false);
   const [annual, setAnnual] = useState(false);
+  const [checkoutLoading, setCheckoutLoading] = useState(null);
 
   useEffect(() => {
     fetch("https://ipapi.co/json/", { signal: AbortSignal.timeout(4000) })
@@ -3836,6 +3837,34 @@ function InAppPricing({ onGetStarted }) {
     els.forEach(el => obs.observe(el));
     return () => obs.disconnect();
   }, []);
+
+  async function handlePlanClick(plan) {
+    if (plan.monthlyEur === 0 || plan.id === 'enterprise') { onGetStarted(); return; }
+    if (!activeUser) { onGetStarted(); return; }
+    setCheckoutLoading(plan.id);
+    try {
+      const resp = await fetch('/api/create-checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          planKey: plan.id,
+          billingPeriod: annual ? 'annual' : 'monthly',
+          userId: activeUser.uid,
+          userEmail: activeUser.email || '',
+        }),
+      });
+      const data = await resp.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        console.error('[checkout] no URL returned:', data);
+        setCheckoutLoading(null);
+      }
+    } catch (err) {
+      console.error('[checkout] error:', err);
+      setCheckoutLoading(null);
+    }
+  }
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--paper)", fontFamily: "DM Sans, sans-serif" }}>
@@ -3961,8 +3990,9 @@ function InAppPricing({ onGetStarted }) {
                   background: dark ? "var(--gold)" : p.monthlyEur === 0 ? "transparent" : "var(--ink)",
                   color: dark ? "#fff" : p.monthlyEur === 0 ? "var(--ink)" : "#fff",
                   border: dark ? "none" : p.monthlyEur === 0 ? "1.5px solid var(--border)" : "none",
-                }} onClick={onGetStarted}>
-                  {p.cta}
+                  opacity: checkoutLoading === p.id ? 0.65 : 1,
+                }} disabled={!!checkoutLoading} onClick={() => handlePlanClick(p)}>
+                  {checkoutLoading === p.id ? 'Redirecting…' : p.cta}
                 </button>
               </div>
             </div>
@@ -4086,6 +4116,17 @@ function App() {
   const [demoMode, setDemoMode] = useState(false);
   const [view, setView] = useState("pricing"); // start on pricing
   const [previewCampaign, setPreviewCampaign] = useState(null);
+  const [upgradedBanner, setUpgradedBanner] = useState(false);
+
+  // Redirect to dashboard when returning from Stripe Checkout success URL
+  const _upgradedParam = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('upgraded') === 'true';
+  useEffect(() => {
+    if (user && _upgradedParam) {
+      setView("dashboard");
+      setUpgradedBanner(true);
+      window.history.replaceState({}, '', '/');
+    }
+  }, [user]);
 
   // Public recording route — must be declared before any conditional returns
   const recordCampaignId = window.location.pathname.match(/^\/record\/([^/]+)/)?.[1] || null;
@@ -4225,7 +4266,7 @@ function App() {
     return (
       <>
         <style>{style}</style>
-        <InAppPricing onGetStarted={() => setView("auth")} />
+        <InAppPricing onGetStarted={() => setView("auth")} activeUser={null} />
         <div style={{ position: "fixed", bottom: 20, right: 20, zIndex: 50 }}>
           <button className="btn btn-gold btn-sm" onClick={() => setDemoMode(true)}>✦ Try Demo</button>
         </div>
@@ -4260,7 +4301,7 @@ function App() {
               <button className="btn btn-outline btn-sm" onClick={() => setView("dashboard")}>← Back to Dashboard</button>
             </div>
             <div style={{ paddingTop: 56 }}>
-              <InAppPricing onGetStarted={() => setView("dashboard")} />
+              <InAppPricing onGetStarted={() => setView("dashboard")} activeUser={demoMode ? null : activeUser} />
             </div>
           </>
         ) : view === "client" ? (
@@ -4284,6 +4325,12 @@ function App() {
                 )}
               </div>
             </nav>
+            {upgradedBanner && (
+              <div style={{ margin: "16px 20px 0", padding: "13px 18px", background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                <span style={{ color: "#166534", fontSize: "0.9rem", fontWeight: 500 }}>✓ Plan upgraded successfully — your new features are now active.</span>
+                <button onClick={() => setUpgradedBanner(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#166534", fontSize: "1.2rem", lineHeight: 1, flexShrink: 0, padding: 0 }}>×</button>
+              </div>
+            )}
             <Dashboard onPreview={handlePreview} userId={activeUser.uid} db={db} onUpgrade={() => setView("pricing")} />
           </>
         )}

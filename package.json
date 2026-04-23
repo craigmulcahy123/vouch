@@ -1,0 +1,9 @@
+{
+  "name": "vouch",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "stripe": "^16.0.0",
+    "firebase-admin": "^12.1.0"
+  }
+}
