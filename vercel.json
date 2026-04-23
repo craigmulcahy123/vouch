@@ -1,1 +1,1 @@
-{"rewrites":[{"source":"/record/(.*)","destination":"/index.html"},{"source":"/profile/(.*)","destination":"/profile.html"},{"source":"/api/(.*)","destination":"/api/$1"}]}
+{"rewrites":[{"source":"/record/(.*)","destination":"/index.html"},{"source":"/profile/(.*)","destination":"/profile.html"},{"source":"/terms","destination":"/terms.html"},{"source":"/privacy","destination":"/privacy.html"},{"source":"/gdpr","destination":"/gdpr.html"},{"source":"/api/(.*)","destination":"/api/$1"}]}

@@ -4292,8 +4292,64 @@ function App() {
   );
 }
 
+// ── Cookie consent banner ─────────────────────────────────────────────────────
+function CookieBanner() {
+  const COOKIE_KEY = "vouch_cookie_consent";
+  const [visible, setVisible] = useState(() => {
+    try { return !localStorage.getItem(COOKIE_KEY); } catch { return false; }
+  });
+
+  function accept() {
+    try { localStorage.setItem(COOKIE_KEY, "accepted"); } catch {}
+    setVisible(false);
+  }
+  function decline() {
+    try { localStorage.setItem(COOKIE_KEY, "declined"); } catch {}
+    setVisible(false);
+  }
+
+  if (!visible) return null;
+
+  return (
+    <div style={{
+      position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 9000,
+      background: "#111", borderTop: "1px solid #2a2a2a",
+      padding: "16px 24px", display: "flex", alignItems: "center",
+      justifyContent: "space-between", gap: 16, flexWrap: "wrap",
+      boxShadow: "0 -8px 32px rgba(0,0,0,0.5)",
+    }}>
+      <p style={{ margin: 0, fontSize: "0.83rem", color: "#aaa", lineHeight: 1.5, flex: 1, minWidth: 220 }}>
+        We use essential cookies to keep you signed in.{" "}
+        <a href="/privacy" style={{ color: "#c8a96e", textDecoration: "none" }}>Privacy Policy</a>
+        {" · "}
+        <a href="/gdpr" style={{ color: "#c8a96e", textDecoration: "none" }}>GDPR</a>
+      </p>
+      <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+        <button onClick={decline} style={{
+          background: "transparent", border: "1px solid #333", color: "#666",
+          borderRadius: 8, padding: "7px 16px", fontSize: "0.82rem", cursor: "pointer",
+        }}>
+          Decline
+        </button>
+        <button onClick={accept} style={{
+          background: "#c8a96e", border: "none", color: "#fff",
+          borderRadius: 8, padding: "7px 16px", fontSize: "0.82rem",
+          fontWeight: 600, cursor: "pointer",
+        }}>
+          Accept
+        </button>
+      </div>
+    </div>
+  );
+}
+
     const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(React.createElement(App));
+    root.render(
+      <>
+        {React.createElement(App)}
+        {React.createElement(CookieBanner)}
+      </>
+    );
   </script>
 </body>
 </html>
