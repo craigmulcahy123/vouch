@@ -1,14 +1,14 @@
 const Stripe = require('stripe');
 
 const PRICE_IDS = {
-  solo_monthly:       'price_SOLO_MONTHLY',
-  solo_annual:        'price_SOLO_ANNUAL',
-  business_monthly:   'price_BUSINESS_MONTHLY',
-  business_annual:    'price_BUSINESS_ANNUAL',
-  agency_monthly:     'price_AGENCY_MONTHLY',
-  agency_annual:      'price_AGENCY_ANNUAL',
-  enterprise_monthly: 'price_ENTERPRISE_MONTHLY',
-  enterprise_annual:  'price_ENTERPRISE_ANNUAL',
+  solo_monthly:       'price_1TPIlc2VR5AuDYR4pw0isqwv',
+  solo_annual:        'price_1TPIlc2VR5AuDYR4sk9egJ52',
+  business_monthly:   'price_1TPIpW2VR5AuDYR4pmpFKC1K',
+  business_annual:    'price_1TPIqA2VR5AuDYR4H2ufRXQG',
+  agency_monthly:     'price_1TPJK12VR5AuDYR4zjYKwOPM',
+  agency_annual:      'price_1TPJKG2VR5AuDYR4PoxssEMX',
+  enterprise_monthly: 'price_1TPJKr2VR5AuDYR4xbYi6z81',
+  enterprise_annual:  'price_1TPJL42VR5AuDYR4hLVcnChu',
 };
 
 module.exports = async function handler(req, res) {
