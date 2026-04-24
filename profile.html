@@ -170,6 +170,23 @@
     @keyframes shimmer { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
     @keyframes spin { to { transform: rotate(360deg); } }
 
+    /* ── Header stats row ── */
+    .profile-stats {
+      display: flex; align-items: stretch; justify-content: center;
+      margin: 24px auto 20px; background: #141414; border: 1px solid #2a2a2a;
+      border-radius: 16px; overflow: hidden; max-width: 380px;
+    }
+    .profile-stat { flex: 1; padding: 15px 18px; text-align: center; position: relative; }
+    .profile-stat + .profile-stat::before {
+      content: ''; position: absolute; left: 0; top: 20%; height: 60%; width: 1px; background: #2a2a2a;
+    }
+    .profile-stat-val {
+      font-family: 'Instrument Serif', serif; font-size: 1.35rem; color: #f0ece4;
+      line-height: 1; margin-bottom: 5px;
+    }
+    .profile-stat-label { font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #555; }
+    .profile-stat.stat-verified .profile-stat-val { color: #6dbf8a; }
+
     /* ── Pending / empty states ── */
     .pending-hero { max-width: 500px; margin: 80px auto; text-align: center; padding: 0 24px; }
     .pending-pip { height: 5px; flex: 1; border-radius: 3px; }
@@ -504,6 +521,18 @@
         if (t) setCompanyName(t.companyName);
       }, [testimonials, companyName]);
 
+      // Dynamic document title
+      useEffect(() => {
+        const name = companyName || "Business Profile";
+        const app = testimonials.filter(t => t.rating > 0);
+        const sc = calcScore(app);
+        if (sc !== null) {
+          document.title = `${name} — ${sc.toFixed(1)} Vouch Score · ${app.length} verified testimonial${app.length !== 1 ? "s" : ""}`;
+        } else {
+          document.title = `${name} — Vouch Profile`;
+        }
+      }, [companyName, testimonials]);
+
       // Sort by most recent; separate featured from grid
       const approved = testimonials
         .filter(t => t.rating > 0)
@@ -543,8 +572,21 @@
             <span className="profile-wordmark">✦ Vouch</span>
             <div className="profile-avatar">{initials}</div>
             <div className="profile-company">{companyName || "Business Profile"}</div>
-            {score !== null && (
-              <div className="verified-badge"><span>✓</span> Vouch Verified</div>
+            {approved.length > 0 && (
+              <div className="profile-stats">
+                <div className="profile-stat">
+                  <div className="profile-stat-val">{approved.length}</div>
+                  <div className="profile-stat-label">Vouches</div>
+                </div>
+                <div className="profile-stat">
+                  <div className="profile-stat-val">{score !== null ? score.toFixed(1) + " ★" : "—"}</div>
+                  <div className="profile-stat-label">Score</div>
+                </div>
+                <div className={`profile-stat${score !== null ? " stat-verified" : ""}`}>
+                  <div className="profile-stat-val">{score !== null ? "✓" : "—"}</div>
+                  <div className="profile-stat-label">Verified</div>
+                </div>
+              </div>
             )}
           </div>
 
@@ -558,7 +600,7 @@
               <div>
                 <div className="score-meta-title">✦ Vouch Score</div>
                 <div className="score-meta-count">
-                  Based on {approved.length} verified testimonial{approved.length !== 1 ? "s" : ""}
+                  {approved.length} people have Vouched for {companyName || "this business"}
                 </div>
                 <RatingBars approved={approved} />
               </div>
