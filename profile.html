@@ -223,6 +223,7 @@
 
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
@@ -288,23 +289,67 @@
 
     // ── Video modal ──────────────────────────────────────────────────────────────
     function VideoModal({ testimonial, onClose }) {
-      const videoRef = useRef(null);
-      const url = firstVideoUrl(testimonial);
+      const rawUrl = firstVideoUrl(testimonial);
+      const [tapToPlay, setTapToPlay] = useState(false);
+      const [loading, setLoading]     = useState(!!rawUrl);
+      const [errored, setErrored]     = useState(false);
+      const videoRef          = useRef(null);
+      const canPlayHandlerRef = useRef(null);
 
       useEffect(() => {
+        if (!rawUrl) return;
         const video = videoRef.current;
-        if (!video || !url) return;
-        video.src = url;
-        video.load();
-        video.play().catch(() => {});
-      }, [url]);
+        if (!video) return;
 
-      // Close on Escape
+        setLoading(true); setErrored(false); setTapToPlay(false);
+        let cancelled = false;
+
+        async function loadAndPlay() {
+          let url = rawUrl;
+          try {
+            url = await firebase.storage().refFromURL(rawUrl).getDownloadURL();
+          } catch (e) {
+            console.warn("[vouch/profile/modal] URL refresh failed:", e.message);
+          }
+          if (cancelled) return;
+          setLoading(false);
+          video.src = url;
+          video.load();
+          const handler = () => {
+            canPlayHandlerRef.current = null;
+            video.play().catch(err => {
+              console.warn("[vouch/profile/modal] play() blocked:", err.name);
+              setTapToPlay(true);
+            });
+          };
+          canPlayHandlerRef.current = handler;
+          video.addEventListener("canplay", handler, { once: true });
+        }
+        loadAndPlay();
+        return () => {
+          cancelled = true;
+          if (canPlayHandlerRef.current) {
+            video.removeEventListener("canplay", canPlayHandlerRef.current);
+            canPlayHandlerRef.current = null;
+          }
+        };
+      }, [rawUrl]);
+
       useEffect(() => {
         function onKey(e) { if (e.key === "Escape") onClose(); }
         window.addEventListener("keydown", onKey);
         return () => window.removeEventListener("keydown", onKey);
       }, [onClose]);
+
+      function handleTap() {
+        const video = videoRef.current;
+        if (!video) return;
+        setTapToPlay(false);
+        video.play().catch(err => {
+          console.warn("[vouch/profile/modal] tap play() failed:", err.name);
+          setTapToPlay(true);
+        });
+      }
 
       return (
         <div className="vmodal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
@@ -319,20 +364,37 @@
               <button className="vmodal-close" onClick={onClose} aria-label="Close">✕</button>
             </div>
 
-            {url ? (
-              <video
-                ref={videoRef}
-                className="vmodal-video"
-                controls
-                playsInline
-                crossOrigin="anonymous"
-                preload="metadata"
-              />
+            {rawUrl ? (
+              <div style={{ position: "relative", background: "#000" }}>
+                <video
+                  ref={videoRef}
+                  className="vmodal-video"
+                  controls
+                  playsInline
+                  preload="auto"
+                  onPlaying={() => setTapToPlay(false)}
+                  onError={() => { setErrored(true); setLoading(false); }}
+                />
+                {loading && (
+                  <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#000", minHeight: 180 }}>
+                    <div style={{ width: 32, height: 32, border: "3px solid #333", borderTopColor: "var(--gold)", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+                  </div>
+                )}
+                {tapToPlay && !errored && (
+                  <div onClick={handleTap} style={{
+                    position: "absolute", inset: 0, display: "flex", flexDirection: "column",
+                    alignItems: "center", justifyContent: "center",
+                    background: "rgba(0,0,0,0.55)", cursor: "pointer", gap: 10,
+                  }}>
+                    <div style={{ width: 56, height: 56, borderRadius: "50%", background: "rgba(200,169,110,0.9)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z"/></svg>
+                    </div>
+                    <span style={{ color: "#fff", fontSize: "0.85rem", fontWeight: 600 }}>Tap to play</span>
+                  </div>
+                )}
+              </div>
             ) : (
-              <div style={{
-                background: "#0a0a0a", aspectRatio: "16/9",
-                display: "flex", alignItems: "center", justifyContent: "center", color: "#444",
-              }}>
+              <div style={{ background: "#0a0a0a", aspectRatio: "16/9", display: "flex", alignItems: "center", justifyContent: "center", color: "#444" }}>
                 No video available
               </div>
             )}
@@ -350,56 +412,108 @@
 
     // ── Featured video (largest, most recent) ────────────────────────────────────
     function FeaturedVideo({ testimonial }) {
-      const url = firstVideoUrl(testimonial);
+      const rawUrl = firstVideoUrl(testimonial);
       const [tapToPlay, setTapToPlay] = useState(false);
-      const videoRef = useRef(null);
+      const [loading, setLoading]     = useState(!!rawUrl);
+      const [errored, setErrored]     = useState(false);
+      const videoRef          = useRef(null);
+      const canPlayHandlerRef = useRef(null);
 
       useEffect(() => {
+        if (!rawUrl) return;
         const video = videoRef.current;
-        if (!video || !url) return;
-        video.src = url;
-        video.load();
-        video.play().catch(() => setTapToPlay(true));
-      }, [url]);
+        if (!video) return;
+
+        setLoading(true); setErrored(false); setTapToPlay(false);
+
+        if (canPlayHandlerRef.current) {
+          video.removeEventListener("canplay", canPlayHandlerRef.current);
+          canPlayHandlerRef.current = null;
+        }
+
+        let cancelled = false;
+        async function loadAndPlay() {
+          let url = rawUrl;
+          try {
+            url = await firebase.storage().refFromURL(rawUrl).getDownloadURL();
+            console.log("[vouch/profile/featured] refreshed URL:", url.slice(0, 80) + "…");
+          } catch (e) {
+            console.warn("[vouch/profile/featured] URL refresh failed:", e.message);
+          }
+          if (cancelled) return;
+          setLoading(false);
+          video.src = url;
+          video.load();
+          const handler = () => {
+            canPlayHandlerRef.current = null;
+            video.play().catch(err => {
+              console.warn("[vouch/profile/featured] play() blocked:", err.name);
+              setTapToPlay(true);
+            });
+          };
+          canPlayHandlerRef.current = handler;
+          video.addEventListener("canplay", handler, { once: true });
+        }
+        loadAndPlay();
+        return () => {
+          cancelled = true;
+          if (canPlayHandlerRef.current) {
+            video.removeEventListener("canplay", canPlayHandlerRef.current);
+            canPlayHandlerRef.current = null;
+          }
+        };
+      }, [rawUrl]);
+
+      function handleTap() {
+        const video = videoRef.current;
+        if (!video) return;
+        setTapToPlay(false);
+        video.play().catch(err => {
+          console.warn("[vouch/profile/featured] tap play() failed:", err.name);
+          setTapToPlay(true);
+        });
+      }
 
       return (
         <div className="section-wrap" style={{ paddingBottom: 0 }}>
           <div className="section-heading">Featured testimonial</div>
           <div className="featured-video-wrap">
-            {url ? (
+            {rawUrl ? (
               <>
                 <video
                   ref={videoRef}
                   controls
                   playsInline
-                  crossOrigin="anonymous"
-                  preload="metadata"
+                  preload="auto"
                   style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                  onPlaying={() => setTapToPlay(false)}
+                  onError={() => { setErrored(true); setLoading(false); }}
                 />
-                {tapToPlay && (
-                  <div
-                    onClick={() => { videoRef.current?.play().catch(() => {}); setTapToPlay(false); }}
-                    style={{
-                      position: "absolute", inset: 0, display: "flex", flexDirection: "column",
-                      alignItems: "center", justifyContent: "center",
-                      background: "rgba(0,0,0,0.55)", cursor: "pointer", gap: 10,
-                    }}>
-                    <div style={{
-                      width: 72, height: 72, borderRadius: "50%",
-                      background: "rgba(200,169,110,0.9)",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                    }}>
+                {loading && (
+                  <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#000" }}>
+                    <div style={{ width: 36, height: 36, border: "3px solid #333", borderTopColor: "var(--gold)", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+                  </div>
+                )}
+                {tapToPlay && !errored && (
+                  <div onClick={handleTap} style={{
+                    position: "absolute", inset: 0, display: "flex", flexDirection: "column",
+                    alignItems: "center", justifyContent: "center",
+                    background: "rgba(0,0,0,0.55)", cursor: "pointer", gap: 10,
+                  }}>
+                    <div style={{ width: 72, height: 72, borderRadius: "50%", background: "rgba(200,169,110,0.9)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                       <svg width="32" height="32" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z"/></svg>
                     </div>
                     <span style={{ color: "#fff", fontSize: "0.9rem", fontWeight: 600 }}>Tap to play</span>
                   </div>
                 )}
+                {errored && (
+                  <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.7)", color: "#e07a7a", fontSize: "0.88rem" }}>
+                    Video could not be loaded
+                  </div>
+                )}
               </>
             ) : (
-              <div style={{
-                position: "absolute", inset: 0, display: "flex", alignItems: "center",
-                justifyContent: "center", background: "#0a0a0a", color: "#333", fontSize: "0.9rem",
-              }}>
+              <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#0a0a0a", color: "#333", fontSize: "0.9rem" }}>
                 No video recorded
               </div>
             )}
@@ -521,20 +635,36 @@
               setNotFound(true); setLoading(false);
             });
 
+          // Try the user doc first, then fall back to campaigns collection for company name
           db.collection("users").doc(userId).get()
             .then(snap => {
               if (snap.exists) {
                 const d = snap.data();
                 const p = d.profile || {};
                 const name = p.businessName || d.companyName || d.displayName || "";
-                console.log("[vouch/profile] user doc companyName:", name || "(empty)");
+                console.log("[vouch/profile] user doc — profile.businessName:", p.businessName, "| companyName:", d.companyName, "| resolved:", name || "(empty)");
                 if (name) setCompanyName(name);
                 setProfileData(p);
-                if (p.isPublic === false) {
-                  setNotFound(true); setLoading(false);
+                if (p.isPublic === false) { setNotFound(true); setLoading(false); return; }
+                if (!name) {
+                  // No name on user doc — look in campaigns for companyName
+                  return db.collection("users").doc(userId).collection("campaigns").limit(1).get()
+                    .then(cSnap => {
+                      if (!cSnap.empty) {
+                        const cn = cSnap.docs[0].data().companyName;
+                        if (cn) { console.log("[vouch/profile] name from campaigns:", cn); setCompanyName(cn); }
+                      }
+                    });
                 }
               } else {
-                console.log("[vouch/profile] user doc not found — deriving name from testimonials");
+                console.log("[vouch/profile] user doc not found — checking campaigns for name");
+                return db.collection("users").doc(userId).collection("campaigns").limit(1).get()
+                  .then(cSnap => {
+                    if (!cSnap.empty) {
+                      const cn = cSnap.docs[0].data().companyName;
+                      if (cn) { console.log("[vouch/profile] name from campaigns:", cn); setCompanyName(cn); }
+                    }
+                  });
               }
             })
             .catch(e => console.warn("[vouch/profile] user doc read:", e.code, e.message));
@@ -543,16 +673,12 @@
         return () => unsub();
       }, []);
 
-      // Derive company name from testimonials if user doc doesn't have it
-      useEffect(() => {
-        if (companyName || testimonials.length === 0) return;
-        const t = testimonials.find(t => t.companyName);
-        if (t) setCompanyName(t.companyName);
-      }, [testimonials, companyName]);
+      // campaignName on testimonials is the campaign title, not the business name —
+      // company name is resolved via user doc / campaigns in startListeners instead.
 
       // Dynamic document title
       useEffect(() => {
-        const name = companyName || "Business Profile";
+        const name = companyName || "Vouch Verified Business";
         const app = testimonials.filter(t => t.rating > 0);
         const sc = calcScore(app);
         if (sc !== null) {
@@ -604,7 +730,7 @@
             ) : (
               <div className="profile-avatar">{initials}</div>
             )}
-            <div className="profile-company">{companyName || "Business Profile"}</div>
+            <div className="profile-company">{companyName || "Vouch Verified Business"}</div>
             {(profileData.industry || profileData.location) && (
               <div className="profile-tags">
                 {profileData.industry && <span className="profile-tag">{profileData.industry}</span>}
