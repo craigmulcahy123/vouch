@@ -397,6 +397,8 @@ function processVideoFormat({ inputPath, outputPath, startSec, duration, width, 
 
 /** Send the two completion emails via Resend. */
 async function sendCompletionEmails({ ownerEmail, clientEmail, data, companyName, processedVideoURLs }) {
+  console.log("[sendEmails] called — ownerEmail:", ownerEmail, "| clientEmail:", clientEmail, "| RESEND_API_KEY present:", !!process.env.RESEND_API_KEY, "| video formats:", Object.keys(processedVideoURLs));
+
   const resend      = getResend();
   const clientName  = data.clientName || "Your client";
   const displayComp = companyName || "your company";
@@ -410,25 +412,54 @@ async function sendCompletionEmails({ ownerEmail, clientEmail, data, companyName
     })
     .join("");
 
-  // Email to the business owner
+  console.log("[sendEmails] download buttons generated:", downloadButtons ? `${Object.keys(processedVideoURLs).length} format(s)` : "none (text-only testimonial)");
+
+  // ── Owner notification email ─────────────────────────────────────────────────
   if (ownerEmail) {
-    await resend.emails.send({
-      from: "Vouch <hello@vouchbusiness.com>",
-      to: [ownerEmail],
-      subject: `Your testimonial from ${clientName} is ready to download`,
-      html: buildOwnerEmail({ clientName, displayComp, downloadButtons }),
-    }).catch(e => console.warn("[sendEmails] owner email failed:", e.message));
+    console.log("[sendEmails] sending owner notification email to:", ownerEmail);
+    try {
+      // Resend SDK v3 returns { data, error } instead of throwing on API errors
+      const { data: emailData, error: emailError } = await resend.emails.send({
+        from: "Vouch <hello@vouchbusiness.com>",
+        to: [ownerEmail],
+        subject: `Your testimonial from ${clientName} is ready to download`,
+        html: buildOwnerEmail({ clientName, displayComp, downloadButtons }),
+      });
+      if (emailError) {
+        console.error("[sendEmails] ❌ owner email API error:", JSON.stringify(emailError));
+      } else {
+        console.log("[sendEmails] ✅ owner email sent — Resend id:", emailData?.id);
+      }
+    } catch (e) {
+      console.error("[sendEmails] ❌ owner email unexpected error:", e.message);
+    }
+  } else {
+    console.warn("[sendEmails] skipping owner email — no ownerEmail resolved for this userId");
   }
 
-  // Email to the client
+  // ── Client thank-you email ───────────────────────────────────────────────────
   if (clientEmail) {
-    await resend.emails.send({
-      from: `${displayComp} via Vouch <hello@vouchbusiness.com>`,
-      to: [clientEmail],
-      subject: `Thank you for your testimonial, ${clientName}!`,
-      html: buildClientEmail({ clientName, displayComp }),
-    }).catch(e => console.warn("[sendEmails] client email failed:", e.message));
+    console.log("[sendEmails] sending client thank-you email to:", clientEmail);
+    try {
+      const { data: emailData, error: emailError } = await resend.emails.send({
+        from: `${displayComp} via Vouch <hello@vouchbusiness.com>`,
+        to: [clientEmail],
+        subject: `Thank you for your testimonial, ${clientName}!`,
+        html: buildClientEmail({ clientName, displayComp }),
+      });
+      if (emailError) {
+        console.error("[sendEmails] ❌ client email API error:", JSON.stringify(emailError));
+      } else {
+        console.log("[sendEmails] ✅ client email sent — Resend id:", emailData?.id);
+      }
+    } catch (e) {
+      console.error("[sendEmails] ❌ client email unexpected error:", e.message);
+    }
+  } else {
+    console.log("[sendEmails] no clientEmail — skipping client thank-you");
   }
+
+  console.log("[sendEmails] done");
 }
 
 // ── Email templates ───────────────────────────────────────────────────────────
