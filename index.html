@@ -165,6 +165,38 @@ function friendlyAuthError(code) {
   return map[code] || "Something went wrong. Please try again.";
 }
 
+// ── Video format helpers ──────────────────────────────────────────────────────
+function isIOSDevice() {
+  return /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+}
+
+// Returns true if the URL points to a .webm file
+// Firebase Storage URLs encode the path, so we decode before checking.
+function isWebmUrl(url) {
+  if (!url) return false;
+  try { return decodeURIComponent(url).includes(".webm"); } catch { return url.includes(".webm"); }
+}
+
+// Pick the best recording MIME type the current browser supports.
+// Returns { mimeType, ext } — mimeType may be "" (browser default).
+function pickRecordingFormat() {
+  const candidates = [
+    { mime: "video/mp4;codecs=avc1", ext: "mp4" },
+    { mime: "video/mp4",             ext: "mp4" },
+    { mime: "video/webm;codecs=vp9", ext: "webm" },
+    { mime: "video/webm",            ext: "webm" },
+  ];
+  for (const c of candidates) {
+    if (MediaRecorder.isTypeSupported(c.mime)) {
+      console.log("[vouch/record] selected format:", c.mime);
+      return c;
+    }
+  }
+  console.log("[vouch/record] no preferred format supported — using browser default");
+  return { mime: "", ext: "webm" }; // fallback; actual type set from mr.mimeType at stop
+}
+
 // ── Firebase Storage — upload video blobs ────────────────────────────────────
 // videoBlobs: { [promptIndex]: Blob }
 // onProgress: (promptIndex, pct) => void
@@ -178,9 +210,15 @@ async function uploadVideos({ storage, userId, campaignId, videoBlobs, onProgres
   await Promise.all(
     entries.map(([idx, blob]) =>
       new Promise((resolve, reject) => {
-        const path = `testimonials/${userId}/${campaignId}/${timestamp}/q${idx}.webm`;
-        const ref = storage.ref(path);
-        const task = ref.put(blob, { contentType: "video/webm" });
+        // Derive content type and extension from the blob itself so iOS mp4
+        // recordings are stored as .mp4, not .webm
+        const mime = blob.type || "video/webm";
+        const ext  = mime.includes("mp4") ? "mp4" : "webm";
+        const path = `testimonials/${userId}/${campaignId}/${timestamp}/q${idx}.${ext}`;
+        const ref  = storage.ref(path);
+        const task = ref.put(blob, { contentType: mime });
+
+        console.log("[vouch/upload] uploading q" + idx, "| mime:", mime, "| ext:", ext, "| path:", path);
 
         task.on(
           "state_changed",
@@ -1674,12 +1712,16 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
         setCameraAvailable(true);
         setLiveStream(stream);
       }
-      const mr = new MediaRecorder(stream);
+      const fmt = pickRecordingFormat();
+      const mr  = fmt.mime ? new MediaRecorder(stream, { mimeType: fmt.mime }) : new MediaRecorder(stream);
       mediaRecorderRef.current = mr;
       chunksRef.current = [];
       mr.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       mr.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: "video/webm" });
+        // Use the authoritative mimeType from the recorder instance
+        const actualMime = mr.mimeType || fmt.mime || "video/webm";
+        const blob = new Blob(chunksRef.current, { type: actualMime });
+        console.log("[vouch/record] recording stopped — mime:", actualMime, "| size:", blob.size);
         const url  = URL.createObjectURL(blob);
         setVideoURLs(prev  => ({ ...prev, [capturedIdx]: url }));
         setVideoBlobs(prev => ({ ...prev, [capturedIdx]: blob }));
@@ -2613,6 +2655,16 @@ function VideoPlaybackModal({ testimonial, onClose }) {
 
       if (cancelled) return;
 
+      // iOS Safari cannot play .webm — show a helpful message instead of a broken player
+      if (isIOSDevice() && isWebmUrl(url)) {
+        console.warn("[vouch/watch] iOS + .webm detected — showing compatibility notice");
+        setFreshURLs(prev => ({ ...prev, [activeIdx]: url }));
+        setLoadingURL(false);
+        setErrored(true);
+        setErrMsg("ios-webm");
+        return;
+      }
+
       setFreshURLs(prev => ({ ...prev, [activeIdx]: url }));
       setLoadingURL(false);
 
@@ -2744,16 +2796,36 @@ function VideoPlaybackModal({ testimonial, onClose }) {
             {errored && (
               <div style={{
                 position: "absolute", inset: 0, display: "flex", flexDirection: "column",
-                alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.75)", gap: 10, padding: "0 24px",
+                alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.85)", gap: 10, padding: "0 28px",
               }}>
-                <div style={{ fontSize: "2rem" }}>⚠️</div>
-                <div style={{ color: "#e07a7a", fontSize: "0.88rem", textAlign: "center" }}>Video could not be loaded.</div>
-                {errMsg && <div style={{ color: "#666", fontSize: "0.72rem", textAlign: "center" }}>{errMsg}</div>}
-                {displayURL && (
-                  <a href={displayURL} target="_blank" rel="noopener noreferrer"
-                    style={{ color: "#c8a96e", fontSize: "0.82rem", textDecoration: "underline", marginTop: 4 }}>
-                    Open in new tab ↗
-                  </a>
+                {errMsg === "ios-webm" ? (
+                  <>
+                    <div style={{ fontSize: "2rem" }}>📱</div>
+                    <div style={{ color: "#f0ece4", fontSize: "0.92rem", textAlign: "center", fontWeight: 600 }}>
+                      Desktop recording — Safari not supported
+                    </div>
+                    <div style={{ color: "#888", fontSize: "0.8rem", textAlign: "center", lineHeight: 1.5 }}>
+                      This video was recorded on desktop (WebM format). Safari on iOS can't play WebM. Open on a desktop browser or use the link below.
+                    </div>
+                    {displayURL && (
+                      <a href={displayURL} target="_blank" rel="noopener noreferrer"
+                        style={{ color: "#c8a96e", fontSize: "0.85rem", textDecoration: "underline", marginTop: 4 }}>
+                        Open in new tab ↗
+                      </a>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <div style={{ fontSize: "2rem" }}>⚠️</div>
+                    <div style={{ color: "#e07a7a", fontSize: "0.88rem", textAlign: "center" }}>Video could not be loaded.</div>
+                    {errMsg && <div style={{ color: "#666", fontSize: "0.72rem", textAlign: "center" }}>{errMsg}</div>}
+                    {displayURL && (
+                      <a href={displayURL} target="_blank" rel="noopener noreferrer"
+                        style={{ color: "#c8a96e", fontSize: "0.82rem", textDecoration: "underline", marginTop: 4 }}>
+                        Open in new tab ↗
+                      </a>
+                    )}
+                  </>
                 )}
               </div>
             )}
