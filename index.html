@@ -846,6 +846,27 @@ const style = `
   .site-footer-dark a { color: #444; text-decoration: none; }
   .site-footer-dark a:hover { color: var(--gold); }
 
+  /* ── Profile Settings Tab ── */
+  .logo-upload-area {
+    border: 2px dashed var(--border); border-radius: 12px;
+    padding: 28px; text-align: center; cursor: pointer; transition: border-color 0.2s;
+    background: var(--cream);
+  }
+  .logo-upload-area:hover { border-color: var(--gold); }
+  .logo-preview { width: 80px; height: 80px; border-radius: 12px; object-fit: cover; margin: 0 auto 10px; display: block; }
+  .toggle-wrap { display: flex; align-items: center; gap: 12px; cursor: pointer; user-select: none; }
+  .toggle-track {
+    width: 44px; height: 24px; border-radius: 12px; background: var(--border);
+    position: relative; transition: background 0.2s; flex-shrink: 0;
+  }
+  .toggle-track.on { background: var(--gold); }
+  .toggle-knob {
+    width: 18px; height: 18px; border-radius: 50%; background: #fff;
+    position: absolute; top: 3px; left: 3px; transition: left 0.2s;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+  }
+  .toggle-track.on .toggle-knob { left: 23px; }
+
   /* User menu in nav */
   .user-menu { position: relative; }
   .user-btn {
@@ -2886,8 +2907,190 @@ function InvitesKanban({ invites, db, userId, onReview }) {
   );
 }
 
+// ── Profile Settings ─────────────────────────────────────────────────────────
+function ProfileSettings({ db, userId, storage }) {
+  const EMPTY = { businessName: "", industry: "", location: "", website: "", bio: "", linkedin: "", twitter: "", instagram: "", isPublic: true };
+  const [fields, setFields]       = useState(EMPTY);
+  const [logoUrl, setLogoUrl]     = useState(null);
+  const [logoFile, setLogoFile]   = useState(null);
+  const [logoPreview, setLogoPreview] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [saving, setSaving]       = useState(false);
+  const [saved, setSaved]         = useState(false);
+  const [error, setError]         = useState("");
+  const fileRef = useRef(null);
+
+  useEffect(() => {
+    if (!db || !userId) return;
+    db.collection("users").doc(userId).get().then(snap => {
+      if (!snap.exists) return;
+      const d = snap.data();
+      const p = d.profile || {};
+      setFields({
+        businessName: p.businessName || d.companyName || "",
+        industry:     p.industry || d.industry || "",
+        location:     p.location || "",
+        website:      p.website || "",
+        bio:          p.bio || "",
+        linkedin:     p.linkedin || "",
+        twitter:      p.twitter || "",
+        instagram:    p.instagram || "",
+        isPublic:     p.isPublic !== false,
+      });
+      if (p.logoUrl) setLogoUrl(p.logoUrl);
+    }).catch(console.error);
+  }, [db, userId]);
+
+  function set(key, val) { setFields(prev => ({ ...prev, [key]: val })); setSaved(false); }
+
+  function handleLogoChange(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (!["image/jpeg", "image/png"].includes(file.type)) { setError("Logo must be a JPG or PNG image."); return; }
+    if (file.size > 2 * 1024 * 1024) { setError("Logo must be under 2 MB."); return; }
+    setError(""); setLogoFile(file); setLogoPreview(URL.createObjectURL(file)); setSaved(false);
+  }
+
+  async function handleSave() {
+    setSaving(true); setError(""); setSaved(false);
+    try {
+      let url = logoUrl;
+      if (logoFile && storage) {
+        setUploading(true);
+        const ref = storage.ref(`logos/${userId}/logo.jpg`);
+        const task = ref.put(logoFile, { contentType: logoFile.type });
+        await new Promise((res, rej) => task.on("state_changed", null, rej, res));
+        url = await task.snapshot.ref.getDownloadURL();
+        setLogoUrl(url); setLogoFile(null); setUploading(false);
+      }
+      await db.collection("users").doc(userId).set({
+        profile: { ...fields, ...(url ? { logoUrl: url } : {}) },
+        companyName: fields.businessName || null,
+      }, { merge: true });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (e) {
+      setError("Save failed: " + e.message); setUploading(false);
+    }
+    setSaving(false);
+  }
+
+  const displayLogo = logoPreview || logoUrl;
+  const profileUrl  = `https://vouchbusiness.com/profile/${userId}`;
+
+  return (
+    <div style={{ maxWidth: 600 }}>
+      <div className="section-title serif" style={{ marginBottom: 4 }}>Profile Settings</div>
+      <div style={{ color: "var(--muted)", fontSize: "0.88rem", marginBottom: 28 }}>
+        Your public profile at{" "}
+        <a href={profileUrl} target="_blank" rel="noopener" style={{ color: "var(--gold)" }}>{profileUrl}</a>
+      </div>
+
+      {error && (
+        <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 8, padding: "10px 14px", marginBottom: 20, color: "#991b1b", fontSize: "0.85rem" }}>
+          {error}
+        </div>
+      )}
+
+      {/* Logo */}
+      <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 14, padding: "24px 28px", marginBottom: 16 }}>
+        <div style={{ fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)", marginBottom: 14 }}>Logo</div>
+        <div className="logo-upload-area" onClick={() => fileRef.current?.click()}>
+          {displayLogo ? (
+            <>
+              <img src={displayLogo} alt="Logo" className="logo-preview" />
+              <div style={{ fontSize: "0.82rem", color: "var(--muted)" }}>Click to replace</div>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: "2rem", marginBottom: 8 }}>🖼</div>
+              <div style={{ fontSize: "0.9rem", fontWeight: 600, marginBottom: 4 }}>Upload your logo</div>
+              <div style={{ fontSize: "0.8rem", color: "var(--muted)" }}>JPG or PNG · Max 2 MB</div>
+            </>
+          )}
+        </div>
+        <input ref={fileRef} type="file" accept="image/jpeg,image/png" style={{ display: "none" }} onChange={handleLogoChange} />
+      </div>
+
+      {/* Business details */}
+      <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 14, padding: "24px 28px", marginBottom: 16 }}>
+        <div style={{ fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)", marginBottom: 14 }}>Business Details</div>
+        <div className="form-row">
+          <div className="field">
+            <label>Business name</label>
+            <input value={fields.businessName} onChange={e => set("businessName", e.target.value)} placeholder="e.g. Acme Agency" />
+          </div>
+          <div className="field">
+            <label>Industry / niche</label>
+            <input value={fields.industry} onChange={e => set("industry", e.target.value)} placeholder="e.g. Digital Marketing" />
+          </div>
+        </div>
+        <div className="form-row">
+          <div className="field">
+            <label>Location</label>
+            <input value={fields.location} onChange={e => set("location", e.target.value)} placeholder="e.g. Dublin, Ireland" />
+          </div>
+          <div className="field">
+            <label>Website URL</label>
+            <input value={fields.website} onChange={e => set("website", e.target.value)} placeholder="https://yoursite.com" />
+          </div>
+        </div>
+        <div className="field">
+          <label>
+            Short bio / description{" "}
+            <span style={{ fontWeight: 400, color: "var(--muted)" }}>({200 - fields.bio.length} chars left)</span>
+          </label>
+          <textarea rows={3} maxLength={200}
+            value={fields.bio} onChange={e => set("bio", e.target.value)}
+            placeholder="Tell clients what you do in a sentence or two…" />
+        </div>
+      </div>
+
+      {/* Social links */}
+      <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 14, padding: "24px 28px", marginBottom: 16 }}>
+        <div style={{ fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)", marginBottom: 14 }}>Social Links</div>
+        <div className="field" style={{ marginBottom: 12 }}>
+          <label>LinkedIn</label>
+          <input value={fields.linkedin} onChange={e => set("linkedin", e.target.value)} placeholder="https://linkedin.com/company/yourcompany" />
+        </div>
+        <div className="field" style={{ marginBottom: 12 }}>
+          <label>Twitter / X</label>
+          <input value={fields.twitter} onChange={e => set("twitter", e.target.value)} placeholder="https://twitter.com/yourhandle" />
+        </div>
+        <div className="field">
+          <label>Instagram</label>
+          <input value={fields.instagram} onChange={e => set("instagram", e.target.value)} placeholder="https://instagram.com/yourhandle" />
+        </div>
+      </div>
+
+      {/* Visibility */}
+      <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 14, padding: "24px 28px", marginBottom: 24 }}>
+        <div style={{ fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)", marginBottom: 14 }}>Visibility</div>
+        <label className="toggle-wrap" onClick={() => set("isPublic", !fields.isPublic)}>
+          <div className={`toggle-track${fields.isPublic ? " on" : ""}`}>
+            <div className="toggle-knob" />
+          </div>
+          <span style={{ fontSize: "0.92rem" }}>Make my Vouch profile public</span>
+        </label>
+        <div style={{ fontSize: "0.8rem", color: "var(--muted)", marginTop: 8, paddingLeft: 56 }}>
+          {fields.isPublic
+            ? "Your profile is visible to anyone with the link."
+            : "Your profile is hidden — only you can view it."}
+        </div>
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+        <button className="btn btn-primary" onClick={handleSave} disabled={saving || uploading}>
+          {uploading ? "Uploading logo…" : saving ? "Saving…" : "Save Profile"}
+        </button>
+        {saved && <span style={{ color: "#3a7a3a", fontSize: "0.88rem", fontWeight: 500 }}>✓ Profile saved</span>}
+      </div>
+    </div>
+  );
+}
+
 // ── Dashboard ──────────────────────────────────────────────────────────────
-function Dashboard({ onPreview, userId, db, onUpgrade }) {
+function Dashboard({ onPreview, userId, db, storage, onUpgrade }) {
   const [innerTab, setInnerTab] = useState("campaigns");
 
   // Plan state — loaded from Firestore users/{userId}.plan; defaults to "free"
@@ -3161,7 +3364,7 @@ function Dashboard({ onPreview, userId, db, onUpgrade }) {
       })()}
 
       <div className="tabs-inner">
-        {[["campaigns","📋 Campaigns"],["testimonials","⭐ Testimonials"],["invites","📬 Invites"],["billing","💳 Plan & Billing"]].map(([key, label]) => (
+        {[["campaigns","📋 Campaigns"],["testimonials","⭐ Testimonials"],["invites","📬 Invites"],["billing","💳 Plan & Billing"],["profile","👤 Profile"]].map(([key, label]) => (
           <button key={key} className={`tab-inner ${innerTab === key ? "active" : ""}`} onClick={() => setInnerTab(key)}>
             {label}
             {key === "invites" && invites.filter(i => i.status === "recorded").length > 0 && (
@@ -3638,6 +3841,11 @@ function Dashboard({ onPreview, userId, db, onUpgrade }) {
           </div>
         );
       })()}
+
+      {/* Profile tab */}
+      {innerTab === "profile" && (
+        <ProfileSettings db={db} userId={userId} storage={storage} />
+      )}
     </div>
   );
 }
@@ -4370,7 +4578,7 @@ function App() {
                 <button onClick={() => setUpgradedBanner(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#166534", fontSize: "1.2rem", lineHeight: 1, flexShrink: 0, padding: 0 }}>×</button>
               </div>
             )}
-            <Dashboard onPreview={handlePreview} userId={activeUser.uid} db={db} onUpgrade={() => setView("pricing")} />
+            <Dashboard onPreview={handlePreview} userId={activeUser.uid} db={db} storage={storage} onUpgrade={() => setView("pricing")} />
             <VouchFooter />
           </>
         )}

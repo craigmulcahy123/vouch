@@ -187,6 +187,29 @@
     .profile-stat-label { font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #555; }
     .profile-stat.stat-verified .profile-stat-val { color: #6dbf8a; }
 
+    /* ── Profile logo ── */
+    .profile-logo {
+      width: 80px; height: 80px; border-radius: 16px; object-fit: cover;
+      margin: 0 auto 20px; display: block; border: 2px solid #2a2a2a;
+    }
+
+    /* ── Industry / location tags ── */
+    .profile-tags { display: flex; gap: 8px; justify-content: center; margin-bottom: 12px; flex-wrap: wrap; }
+    .profile-tag {
+      font-size: 0.75rem; font-weight: 600; padding: 3px 11px; border-radius: 20px;
+      background: #1e1e1e; border: 1px solid #2a2a2a; color: #888;
+    }
+
+    /* ── Website + social links ── */
+    .profile-links { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 14px; }
+    .profile-link {
+      font-size: 0.78rem; font-weight: 600; color: #666; text-decoration: none;
+      display: inline-flex; align-items: center; gap: 4px; padding: 5px 12px;
+      background: #141414; border: 1px solid #2a2a2a; border-radius: 20px;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .profile-link:hover { border-color: var(--gold); color: var(--gold); }
+
     /* ── Pending / empty states ── */
     .pending-hero { max-width: 500px; margin: 80px auto; text-align: center; padding: 0 24px; }
     .pending-pip { height: 5px; flex: 1; border-radius: 3px; }
@@ -465,6 +488,7 @@
       const [loading, setLoading]           = useState(true);
       const [notFound, setNotFound]         = useState(false);
       const [companyName, setCompanyName]   = useState("");
+      const [profileData, setProfileData]   = useState({});
       const [testimonials, setTestimonials] = useState([]);
       const [modalTarget, setModalTarget]   = useState(null);
 
@@ -501,9 +525,14 @@
             .then(snap => {
               if (snap.exists) {
                 const d = snap.data();
-                const name = d.companyName || d.displayName || "";
+                const p = d.profile || {};
+                const name = p.businessName || d.companyName || d.displayName || "";
                 console.log("[vouch/profile] user doc companyName:", name || "(empty)");
                 if (name) setCompanyName(name);
+                setProfileData(p);
+                if (p.isPublic === false) {
+                  setNotFound(true); setLoading(false);
+                }
               } else {
                 console.log("[vouch/profile] user doc not found — deriving name from testimonials");
               }
@@ -570,8 +599,18 @@
           {/* Header */}
           <div className="profile-hero">
             <span className="profile-wordmark">✦ Vouch</span>
-            <div className="profile-avatar">{initials}</div>
+            {profileData.logoUrl ? (
+              <img src={profileData.logoUrl} alt={companyName || "Logo"} className="profile-logo" />
+            ) : (
+              <div className="profile-avatar">{initials}</div>
+            )}
             <div className="profile-company">{companyName || "Business Profile"}</div>
+            {(profileData.industry || profileData.location) && (
+              <div className="profile-tags">
+                {profileData.industry && <span className="profile-tag">{profileData.industry}</span>}
+                {profileData.location && <span className="profile-tag">📍 {profileData.location}</span>}
+              </div>
+            )}
             {approved.length > 0 && (
               <div className="profile-stats">
                 <div className="profile-stat">
@@ -586,6 +625,22 @@
                   <div className="profile-stat-val">{score !== null ? "✓" : "—"}</div>
                   <div className="profile-stat-label">Verified</div>
                 </div>
+              </div>
+            )}
+            {(profileData.website || profileData.linkedin || profileData.twitter || profileData.instagram) && (
+              <div className="profile-links">
+                {profileData.website && (
+                  <a href={profileData.website} target="_blank" rel="noopener" className="profile-link">🌐 Website</a>
+                )}
+                {profileData.linkedin && (
+                  <a href={profileData.linkedin} target="_blank" rel="noopener" className="profile-link">in LinkedIn</a>
+                )}
+                {profileData.twitter && (
+                  <a href={profileData.twitter} target="_blank" rel="noopener" className="profile-link">𝕏 Twitter</a>
+                )}
+                {profileData.instagram && (
+                  <a href={profileData.instagram} target="_blank" rel="noopener" className="profile-link">📸 Instagram</a>
+                )}
               </div>
             )}
           </div>
@@ -615,6 +670,16 @@
                 <div style={{ display: "flex", gap: 6, width: 120, margin: "0 auto" }}>
                   {[0,1,2].map(i => <div key={i} className="pending-pip" style={{ background: i < approved.length ? "#c8a96e" : "#2a2a2a" }} />)}
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Bio section */}
+          {profileData.bio && (
+            <div style={{ maxWidth: 860, margin: "0 auto 32px", padding: "0 24px" }}>
+              <div style={{ background: "#141414", border: "1px solid #222", borderRadius: 14, padding: "20px 24px" }}>
+                <div style={{ fontSize: "0.68rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "#555", marginBottom: 8 }}>About</div>
+                <p style={{ fontSize: "0.95rem", color: "#aaa", lineHeight: 1.65, margin: 0 }}>{profileData.bio}</p>
               </div>
             </div>
           )}
