@@ -2552,58 +2552,125 @@ function VideoEditor({ testimonial, onClose }) {
 
 // ── Video Playback Modal ──────────────────────────────────────────────────────
 function VideoPlaybackModal({ testimonial, onClose }) {
-  const videoURLs = testimonial.videoURLs || {};
-  const keys      = Object.keys(videoURLs);
-  const prompts   = testimonial.prompts || [];
+  const rawURLs = testimonial.videoURLs || {};
+  // Sort numerically so Q1, Q2, Q3... are always in order
+  const keys    = Object.keys(rawURLs).sort((a, b) => Number(a) - Number(b));
+  const prompts = testimonial.prompts || [];
 
-  const [activeIdx, setActiveIdx] = useState(keys[0] || null);
-  const [tapToPlay, setTapToPlay] = useState(false); // true when autoplay was blocked
-  const [canPlay, setCanPlay]     = useState(false);  // true once video is decodeable
-  const [errored, setErrored]     = useState(false);
+  const [activeIdx, setActiveIdx]   = useState(keys[0] ?? null);
+  const [freshURLs, setFreshURLs]   = useState({});
+  const [loadingURL, setLoadingURL] = useState(false);
+  const [tapToPlay, setTapToPlay]   = useState(false);
+  const [errored, setErrored]       = useState(false);
+  const [errMsg, setErrMsg]         = useState("");
 
   const videoRef = useRef(null);
+  // Holds the canplay handler so cleanup can remove it if the tab changes mid-load
+  const canPlayHandlerRef = useRef(null);
 
-  // When the active clip changes, reload the video and attempt autoplay
+  // Log stored URLs once on open — useful for debugging
+  useEffect(() => {
+    console.log("[vouch/watch] opening modal —", testimonial.clientName);
+    console.log("[vouch/watch] videoURLs from Firestore:", rawURLs);
+    console.log("[vouch/watch] keys (sorted):", keys);
+    if (keys.length === 0) console.warn("[vouch/watch] ⚠ no videoURLs found on this testimonial");
+  }, []);
+
+  // When the active clip index changes, refresh the URL and load the video
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || !activeIdx || !videoURLs[activeIdx]) return;
+    if (!video || activeIdx === null) return;
 
-    setTapToPlay(false);
-    setCanPlay(false);
-    setErrored(false);
+    const storedURL = rawURLs[activeIdx];
+    if (!storedURL) {
+      console.warn("[vouch/watch] no URL for key:", activeIdx);
+      setErrored(true);
+      setErrMsg("No video stored for this question.");
+      return;
+    }
 
-    // Set src directly — avoid blob URLs on iOS (they can fail cross-origin)
-    video.src = videoURLs[activeIdx];
-    video.load();
-    video.play().catch(() => {
-      // Autoplay blocked (common on iOS when no prior user gesture on THIS element)
-      setTapToPlay(true);
-    });
+    // Reset state for the new clip
+    setErrored(false); setErrMsg(""); setTapToPlay(false); setLoadingURL(true);
+
+    // Remove any stale canplay handler from a previous load
+    if (canPlayHandlerRef.current) {
+      video.removeEventListener("canplay", canPlayHandlerRef.current);
+      canPlayHandlerRef.current = null;
+    }
+
+    let cancelled = false;
+
+    async function loadAndPlay() {
+      // Refresh the download URL so expired tokens are never a problem
+      let url = storedURL;
+      try {
+        const ref = firebase.storage().refFromURL(storedURL);
+        url = await ref.getDownloadURL();
+        console.log("[vouch/watch] refreshed URL for key", activeIdx, "→", url.slice(0, 80) + "…");
+      } catch (e) {
+        console.warn("[vouch/watch] URL refresh failed, using stored URL:", e.message);
+      }
+
+      if (cancelled) return;
+
+      setFreshURLs(prev => ({ ...prev, [activeIdx]: url }));
+      setLoadingURL(false);
+
+      // Setting src + load() prepares the media — do NOT call play() yet.
+      // Instead, play() is called from the canplay event, ensuring the browser
+      // has decoded at least the first frame before we ask it to play.
+      video.src = url;
+      video.load();
+
+      const handler = () => {
+        canPlayHandlerRef.current = null;
+        console.log("[vouch/watch] canplay fired for key:", activeIdx);
+        video.play().catch(err => {
+          console.warn("[vouch/watch] play() blocked (autoplay policy):", err.name, "—", err.message);
+          setTapToPlay(true);
+        });
+      };
+      canPlayHandlerRef.current = handler;
+      video.addEventListener("canplay", handler, { once: true });
+    }
+
+    loadAndPlay();
+
+    return () => {
+      cancelled = true;
+      if (canPlayHandlerRef.current) {
+        video.removeEventListener("canplay", canPlayHandlerRef.current);
+        canPlayHandlerRef.current = null;
+      }
+    };
   }, [activeIdx]);
 
-  // Hide tap-to-play once the video is actually playing
-  function handlePlaying() {
-    setTapToPlay(false);
-    setCanPlay(true);
-  }
-
-  function handleCanPlay() {
-    setCanPlay(true);
-  }
+  function handlePlaying() { setTapToPlay(false); }
 
   function handleError() {
+    const video = videoRef.current;
+    const code  = video?.error?.code;
+    const msg   = video?.error?.message || "Unknown media error";
+    console.error("[vouch/watch] ❌ video error — MediaError code:", code, "| message:", msg);
+    console.error("[vouch/watch]    src was:", video?.src?.slice(0, 100));
     setErrored(true);
+    setErrMsg(`MediaError ${code}: ${msg}`);
     setTapToPlay(false);
   }
 
   function handleTap() {
     const video = videoRef.current;
     if (!video) return;
-    video.play().catch(() => {});
     setTapToPlay(false);
+    video.play().catch(err => {
+      console.warn("[vouch/watch] tap play() failed:", err.name, err.message);
+      setTapToPlay(true);
+    });
   }
 
   if (keys.length === 0) return null;
+
+  const displayURL = freshURLs[activeIdx] || rawURLs[activeIdx];
 
   return (
     <div className="video-modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
@@ -2621,9 +2688,9 @@ function VideoPlaybackModal({ testimonial, onClose }) {
               <button key={idx} className={`video-clip-tab ${activeIdx === idx ? "active" : ""}`}
                 onClick={() => setActiveIdx(idx)}>
                 Q{Number(idx) + 1}
-                {prompts[idx] && (
+                {prompts[Number(idx)] && (
                   <span style={{ display: "block", fontSize: "0.72rem", opacity: 0.7, maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {prompts[idx]}
+                    {prompts[Number(idx)]}
                   </span>
                 )}
               </button>
@@ -2631,42 +2698,45 @@ function VideoPlaybackModal({ testimonial, onClose }) {
           </div>
         )}
 
-        {/* Video player — wrapper keeps tap-to-play overlay positioned correctly */}
-        {activeIdx !== null && videoURLs[activeIdx] && (
-          <div style={{ position: "relative", borderRadius: 10, overflow: "hidden", background: "#000" }}>
+        {/* Video player */}
+        {activeIdx !== null && (
+          <div style={{ position: "relative", borderRadius: 10, overflow: "hidden", background: "#000", minHeight: 180 }}>
+            {/* Loading spinner while URL is being refreshed */}
+            {loadingURL && (
+              <div style={{
+                position: "absolute", inset: 0, display: "flex", alignItems: "center",
+                justifyContent: "center", background: "#000", zIndex: 10,
+              }}>
+                <div style={{ width: 36, height: 36, border: "3px solid #333", borderTopColor: "var(--gold)", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+              </div>
+            )}
+
+            {/* The video element — no crossOrigin so CORS doesn't block plain playback */}
             <video
               ref={videoRef}
               controls
-              playsInline          /* required for iOS inline playback */
-              crossOrigin="anonymous"
-              preload="metadata"
+              playsInline
+              preload="auto"
               onPlaying={handlePlaying}
-              onCanPlay={handleCanPlay}
               onError={handleError}
               style={{ width: "100%", display: "block" }}
             />
 
-            {/* Tap-to-play overlay — shown when autoplay is blocked */}
+            {/* Tap-to-play overlay — shown when autoplay policy blocks auto-start */}
             {tapToPlay && !errored && (
-              <div
-                onClick={handleTap}
-                style={{
-                  position: "absolute", inset: 0,
-                  display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-                  background: "rgba(0,0,0,0.55)", cursor: "pointer", gap: 10,
-                }}>
+              <div onClick={handleTap} style={{
+                position: "absolute", inset: 0,
+                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                background: "rgba(0,0,0,0.55)", cursor: "pointer", gap: 10,
+              }}>
                 <div style={{
                   width: 64, height: 64, borderRadius: "50%",
                   background: "rgba(200,169,110,0.9)",
                   display: "flex", alignItems: "center", justifyContent: "center",
                 }}>
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="#fff">
-                    <path d="M8 5v14l11-7z"/>
-                  </svg>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z"/></svg>
                 </div>
-                <span style={{ color: "#fff", fontSize: "0.9rem", fontWeight: 600, letterSpacing: "0.04em" }}>
-                  Tap to play
-                </span>
+                <span style={{ color: "#fff", fontSize: "0.9rem", fontWeight: 600 }}>Tap to play</span>
               </div>
             )}
 
@@ -2674,24 +2744,25 @@ function VideoPlaybackModal({ testimonial, onClose }) {
             {errored && (
               <div style={{
                 position: "absolute", inset: 0, display: "flex", flexDirection: "column",
-                alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.7)", gap: 10,
+                alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.75)", gap: 10, padding: "0 24px",
               }}>
                 <div style={{ fontSize: "2rem" }}>⚠️</div>
-                <div style={{ color: "#e07a7a", fontSize: "0.88rem", textAlign: "center", padding: "0 24px" }}>
-                  Video could not be loaded.
-                </div>
-                <a href={videoURLs[activeIdx]} target="_blank" rel="noopener noreferrer"
-                  style={{ color: "#c8a96e", fontSize: "0.82rem", textDecoration: "underline" }}>
-                  Open in new tab
-                </a>
+                <div style={{ color: "#e07a7a", fontSize: "0.88rem", textAlign: "center" }}>Video could not be loaded.</div>
+                {errMsg && <div style={{ color: "#666", fontSize: "0.72rem", textAlign: "center" }}>{errMsg}</div>}
+                {displayURL && (
+                  <a href={displayURL} target="_blank" rel="noopener noreferrer"
+                    style={{ color: "#c8a96e", fontSize: "0.82rem", textDecoration: "underline", marginTop: 4 }}>
+                    Open in new tab ↗
+                  </a>
+                )}
               </div>
             )}
           </div>
         )}
 
-        {prompts[activeIdx] && (
+        {activeIdx !== null && prompts[Number(activeIdx)] && (
           <div style={{ marginTop: 14, color: "#888", fontSize: "0.85rem", lineHeight: 1.5 }}>
-            <span style={{ color: "var(--gold)", fontWeight: 600 }}>Q: </span>{prompts[activeIdx]}
+            <span style={{ color: "var(--gold)", fontWeight: 600 }}>Q: </span>{prompts[Number(activeIdx)]}
           </div>
         )}
       </div>
@@ -3160,10 +3231,16 @@ function Dashboard({ onPreview, userId, db, storage, onUpgrade }) {
       .orderBy("createdAt", "desc")
       .onSnapshot(
         snap => {
-          console.log("[vouch] testimonials snapshot — count:", snap.docs.length,
-            "| path: users/" + userId + "/testimonials",
-            "| docs:", snap.docs.map(d => d.id));
-          setTestimonials(snap.docs.map(d => d.data()));
+          const docs = snap.docs.map(d => d.data());
+          console.log("[vouch] testimonials snapshot — count:", docs.length,
+            "| path: users/" + userId + "/testimonials");
+          docs.forEach(t => {
+            const urlKeys = Object.keys(t.videoURLs || {});
+            console.log("[vouch]   testimonial", t.id, "| client:", t.clientName,
+              "| status:", t.status,
+              "| videoURLs keys:", urlKeys.length ? urlKeys : "(none)");
+          });
+          setTestimonials(docs);
         },
         err => console.error("[vouch] testimonials listener error:", err.code, err.message)
       );
