@@ -42,51 +42,109 @@ module.exports = async function handler(req, res) {
 }
 
 function buildEmailHTML({ clientName, companyName, campaignName, prompts, recordingLink }) {
-  const promptRows = prompts.map((p, i) => `
-    <tr>
-      <td style="padding:10px 0;border-bottom:1px solid #ede8dc;vertical-align:top;width:28px;">
-        <span style="display:inline-block;width:22px;height:22px;border-radius:50%;background:#c8a96e;color:#fff;font-size:11px;font-weight:700;text-align:center;line-height:22px;">${i + 1}</span>
-      </td>
-      <td style="padding:10px 0 10px 12px;border-bottom:1px solid #ede8dc;font-size:14px;color:#3a3530;line-height:1.5;">${p}</td>
-    </tr>`).join("");
-
   return `<!DOCTYPE html>
 <html lang="en">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Share your experience</title></head>
-<body style="margin:0;padding:0;background:#f5f0e8;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f0e8;padding:48px 24px;">
-    <tr><td align="center">
-      <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;">
-        <tr><td style="padding-bottom:32px;text-align:center;">
-          <span style="font-size:20px;color:#c8a96e;font-style:italic;">Vouch&#10022;</span>
-        </td></tr>
-        <tr><td style="background:#faf7f2;border:1px solid #ddd8cc;border-radius:20px;overflow:hidden;">
-          <table width="100%" cellpadding="0" cellspacing="0">
-            <tr><td style="background:#c8a96e;height:4px;font-size:1px;line-height:1px;">&nbsp;</td></tr>
-          </table>
-          <table width="100%" cellpadding="0" cellspacing="0">
-            <tr><td style="padding:40px 44px;">
-              <p style="margin:0 0 8px;font-size:11px;font-weight:600;color:#c8a96e;text-transform:uppercase;letter-spacing:0.1em;">You've been invited</p>
-              <h1 style="margin:0 0 16px;font-size:26px;font-weight:400;color:#0e0e0e;line-height:1.25;">Hi ${clientName}, share your<br><em>honest experience</em> with us</h1>
-              <p style="margin:0 0 28px;font-size:15px;color:#7a7060;line-height:1.6;">${companyName} would love to hear about your experience. It takes just a few minutes — and your words could help others make a great decision.</p>
-              <p style="margin:0 0 12px;font-size:11px;font-weight:600;color:#7a7060;text-transform:uppercase;letter-spacing:0.06em;">You'll be asked about</p>
-              <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:32px;">${promptRows}</table>
-              <table cellpadding="0" cellspacing="0" style="margin-bottom:28px;">
-                <tr><td style="background:#0e0e0e;border-radius:10px;">
-                  <a href="${recordingLink}" style="display:inline-block;padding:14px 32px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;">Record My Testimonial &rarr;</a>
-                </td></tr>
-              </table>
-              <p style="margin:0;font-size:12px;color:#aaa;line-height:1.5;">Or copy this link: <a href="${recordingLink}" style="color:#c8a96e;">${recordingLink}</a></p>
-            </td></tr>
-          </table>
-          <table width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid #ede8dc;">
-            <tr><td style="padding:18px 44px;text-align:center;">
-              <p style="margin:0;font-size:11px;color:#bbb;">Sent via <span style="color:#c8a96e;">Vouch</span> on behalf of ${companyName} &middot; ${campaignName}</p>
-            </td></tr>
-          </table>
-        </td></tr>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Share your experience with ${companyName}</title>
+</head>
+<body style="margin:0;padding:0;background:#f0ece4;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;">
+
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background:#f0ece4;">
+    <tr><td style="padding:48px 16px;" align="center">
+
+      <!-- Card -->
+      <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="max-width:560px;width:100%;">
+
+        <!-- Dark header with logo -->
+        <tr>
+          <td style="background:#0e0e0e;border-radius:18px 18px 0 0;padding:26px 40px;text-align:center;">
+            <span style="font-family:Georgia,'Times New Roman',serif;font-size:21px;font-style:italic;color:#c8a96e;letter-spacing:0.06em;">&#10022; Vouch</span>
+          </td>
+        </tr>
+
+        <!-- Gold accent strip -->
+        <tr><td style="background:#c8a96e;height:3px;font-size:0;line-height:0;">&nbsp;</td></tr>
+
+        <!-- White body -->
+        <tr>
+          <td style="background:#ffffff;padding:48px 44px 40px;">
+
+            <!-- Heading -->
+            <h1 style="margin:0 0 20px;font-family:Georgia,'Times New Roman',serif;font-size:28px;font-weight:400;color:#0e0e0e;line-height:1.3;">
+              Hi ${clientName},<br>
+              <em style="color:#3a3530;">${companyName} would love<br>to hear from you</em>
+            </h1>
+
+            <!-- Body copy -->
+            <p style="margin:0 0 40px;font-size:16px;color:#5a5348;line-height:1.7;">
+              They&#8217;ve asked you to record a short video testimonial. It takes less than 5 minutes and you can do it from your phone right now.
+            </p>
+
+            <!-- CTA button -->
+            <table cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:48px;">
+              <tr>
+                <td style="background:#c8a96e;border-radius:12px;">
+                  <a href="${recordingLink}" style="display:inline-block;padding:17px 40px;font-size:16px;font-weight:700;color:#0e0e0e;text-decoration:none;letter-spacing:0.01em;white-space:nowrap;">
+                    Record my testimonial &rarr;
+                  </a>
+                </td>
+              </tr>
+            </table>
+
+            <!-- How it works -->
+            <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background:#faf7f2;border:1px solid #ede8df;border-radius:14px;margin-bottom:36px;">
+              <tr>
+                <td style="padding:26px 28px;">
+                  <p style="margin:0 0 20px;font-size:10px;font-weight:700;color:#c8a96e;text-transform:uppercase;letter-spacing:0.12em;">How it works</p>
+                  <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+                    <tr>
+                      <td width="33%" style="text-align:center;padding:0 8px;vertical-align:top;">
+                        <p style="margin:0 0 10px;font-size:28px;line-height:1;">&#128249;</p>
+                        <p style="margin:0 0 5px;font-size:13px;font-weight:700;color:#0e0e0e;">Record</p>
+                        <p style="margin:0;font-size:12px;color:#9a9080;line-height:1.5;">Answer a few short questions on camera</p>
+                      </td>
+                      <td width="33%" style="text-align:center;padding:0 8px;vertical-align:top;">
+                        <p style="margin:0 0 10px;font-size:28px;line-height:1;">&#11088;</p>
+                        <p style="margin:0 0 5px;font-size:13px;font-weight:700;color:#0e0e0e;">Rate</p>
+                        <p style="margin:0;font-size:12px;color:#9a9080;line-height:1.5;">Give your honest rating out of five</p>
+                      </td>
+                      <td width="33%" style="text-align:center;padding:0 8px;vertical-align:top;">
+                        <p style="margin:0 0 10px;font-size:28px;line-height:1;">&#9989;</p>
+                        <p style="margin:0 0 5px;font-size:13px;font-weight:700;color:#0e0e0e;">Submit</p>
+                        <p style="margin:0;font-size:12px;color:#9a9080;line-height:1.5;">That&#8217;s it &#8212; done in minutes</p>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+
+            <!-- Fallback link -->
+            <p style="margin:0;font-size:12px;color:#bbb;line-height:1.6;">
+              Button not working?<br>
+              <a href="${recordingLink}" style="color:#c8a96e;text-decoration:none;">${recordingLink}</a>
+            </p>
+
+          </td>
+        </tr>
+
+        <!-- Footer -->
+        <tr>
+          <td style="background:#f5f0e8;border-top:1px solid #e8e2d8;border-radius:0 0 18px 18px;padding:22px 44px;text-align:center;">
+            <p style="margin:0;font-size:12px;color:#9a9080;line-height:1.7;">
+              Powered by <a href="https://vouchbusiness.com" style="color:#c8a96e;text-decoration:none;font-weight:600;">Vouch</a>
+              &#8212; the trust platform for modern businesses<br>
+              <span style="color:#bbb;">Sent on behalf of ${companyName}</span>
+            </p>
+          </td>
+        </tr>
+
       </table>
     </td></tr>
   </table>
-</body></html>`;
+
+</body>
+</html>`;
 }

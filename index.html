@@ -590,10 +590,27 @@ const style = `
   .star-btn.filled { color: #c8a96e; }
   .star-btn:hover { transform: scale(1.2); }
 
-  .success-screen { text-align: center; padding: 20px 0; }
-  .success-icon { font-size: 3rem; margin-bottom: 16px; }
-  .success-title { font-family: 'Instrument Serif', serif; font-size: 1.8rem; margin-bottom: 8px; }
-  .success-sub { color: #888; font-size: 0.9rem; }
+  @keyframes pop { 0% { transform: scale(0.5); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+  .success-celebrate { font-size: 3.5rem; margin-bottom: 20px; display: inline-block; animation: pop 0.45s cubic-bezier(0.175,0.885,0.32,1.275) both; }
+  .success-title { font-family: 'Instrument Serif', serif; font-size: 1.9rem; margin-bottom: 10px; color: #f0ece4; }
+  .success-sub { color: #888; font-size: 0.92rem; margin-bottom: 28px; }
+  .success-quote-card { background: #0e0e0e; border: 1px solid #2a2a2a; border-left: 3px solid #c8a96e; border-radius: 12px; padding: 20px 22px; text-align: left; margin-bottom: 32px; }
+  .success-quote-label { color: #c8a96e; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 10px; }
+  .success-quote-text { font-family: 'Instrument Serif', serif; font-size: 1.08rem; font-style: italic; color: #ddd; line-height: 1.65; }
+  .success-step { display: flex; align-items: flex-start; gap: 14px; padding: 12px 0; border-bottom: 1px solid #1c1c1c; text-align: left; }
+  .success-step:last-child { border-bottom: none; }
+  .success-step-icon { font-size: 1.15rem; flex-shrink: 0; margin-top: 1px; }
+  .success-step-label { font-size: 0.87rem; font-weight: 600; color: #e0dbd0; margin-bottom: 2px; }
+  .success-step-desc { font-size: 0.8rem; color: #666; line-height: 1.45; }
+  .success-divider { height: 1px; background: #1c1c1c; margin: 28px 0; }
+  .success-conversion { background: linear-gradient(135deg, #1a1610 0%, #130f0a 100%); border: 1px solid rgba(200,169,110,0.25); border-radius: 16px; padding: 32px 24px; text-align: center; margin-bottom: 20px; }
+  .success-conversion-heading { font-family: 'Instrument Serif', serif; font-size: 1.5rem; color: #f0ece4; margin-bottom: 10px; line-height: 1.3; }
+  .success-conversion-sub { font-size: 0.88rem; color: #888; margin-bottom: 24px; line-height: 1.6; }
+  .success-cta-btn { display: inline-block; background: #c8a96e; color: #0e0e0e; font-family: 'DM Sans', sans-serif; font-size: 0.95rem; font-weight: 700; padding: 14px 28px; border-radius: 10px; text-decoration: none; margin-bottom: 14px; transition: opacity 0.15s; }
+  .success-cta-btn:hover { opacity: 0.88; }
+  .success-cta-microcopy { font-size: 0.75rem; color: #555; }
+  .success-footer { font-size: 0.78rem; color: #444; text-align: center; margin-top: 20px; }
+  .success-footer a { color: #c8a96e; text-decoration: none; }
 
   .step-dots { display: flex; gap: 8px; justify-content: center; margin-bottom: 32px; }
   .step-dot { width: 8px; height: 8px; border-radius: 50%; background: #333; transition: background 0.2s; }
@@ -735,17 +752,7 @@ const style = `
   .resume-banner-text strong { display: block; color: #a8e0a8; margin-bottom: 2px; }
   .resume-banner-actions { display: flex; gap: 8px; flex-shrink: 0; }
 
-  /* What happens next */
-  .whats-next { margin-top: 24px; padding-top: 20px; border-top: 1px solid #1e1e1e; }
-  .whats-next-title { font-size: 0.75rem; font-weight: 700; color: #666; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 14px; }
-  .whats-next-steps { display: flex; flex-direction: column; gap: 10px; }
-  .whats-next-step { display: flex; align-items: flex-start; gap: 12px; }
-  .whats-next-num {
-    width: 22px; height: 22px; border-radius: 50%; background: #1e1e1e;
-    border: 1px solid #2a2a2a; display: flex; align-items: center; justify-content: center;
-    font-size: 0.7rem; font-weight: 700; color: #c8a96e; flex-shrink: 0; margin-top: 1px;
-  }
-  .whats-next-text { font-size: 0.84rem; color: #777; line-height: 1.45; }
+  .success-steps-label { font-size: 0.72rem; font-weight: 700; color: #555; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 16px; text-align: left; }
 
   /* Camera test checklist */
   .cam-checklist { display: flex; flex-direction: column; gap: 10px; }
@@ -2205,34 +2212,58 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
           {previewBar}
           <button className="client-logo" style={{ background: "none", border: "none", cursor: onBack ? "pointer" : "default" }} onClick={onBack || undefined}>✦ Vouch</button>
           <div className="client-card" style={{ textAlign: "center" }}>
-            <div style={{ fontSize: "3rem", marginBottom: 16 }}>🌟</div>
-            <div className="client-title">Thank you, {name || "friend"}!</div>
-            <div className="client-sub" style={{ marginBottom: 24 }}>
-              Your testimonial has been submitted and is being reviewed.
-            </div>
+
+            {/* Celebration */}
+            <div><span className="success-celebrate">🎉</span></div>
+            <div className="success-title">Thank you, {name || "friend"}!</div>
+            <div className="success-sub">Your testimonial has been submitted.</div>
+
+            {/* AI quote card */}
             {generatedQuote && (
-              <div style={{ background: "#111", border: "1px solid #2a2a2a", borderRadius: 12, padding: 20, textAlign: "left", marginBottom: 24 }}>
-                <div style={{ color: "#666", fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>Your testimonial preview</div>
-                <div style={{ fontFamily: "Instrument Serif, serif", fontSize: "1.05rem", fontStyle: "italic", color: "#ddd", lineHeight: 1.6 }}>"{generatedQuote}"</div>
+              <div className="success-quote-card">
+                <div className="success-quote-label">Your AI-generated quote</div>
+                <div className="success-quote-text">"{generatedQuote}"</div>
               </div>
             )}
-            <div className="whats-next">
-              <div className="whats-next-title">What happens now?</div>
-              <div className="whats-next-steps">
-                {[
-                  "We review your testimonial",
-                  "We produce a polished video",
-                  `${campaign?.companyName || "Your story"} gets shared — and you might be famous!`,
-                ].map((text, i) => (
-                  <div key={i} className="whats-next-step">
-                    <div className="whats-next-num">{i + 1}</div>
-                    <div className="whats-next-text">{text}</div>
+
+            {/* What happens next */}
+            <div style={{ marginBottom: 28 }}>
+              <div className="success-steps-label">What happens next</div>
+              {[
+                { icon: "👀", label: "We review your testimonial", desc: "Our team checks everything looks great." },
+                { icon: "🎬", label: "We produce a polished video", desc: "Your recording gets professionally processed." },
+                { icon: "🚀", label: `${campaign?.companyName || "Your story"} shares your story`, desc: "Your testimonial helps others make great decisions." },
+              ].map(({ icon, label, desc }, i) => (
+                <div key={i} className="success-step">
+                  <div className="success-step-icon">{icon}</div>
+                  <div>
+                    <div className="success-step-label">{label}</div>
+                    <div className="success-step-desc">{desc}</div>
                   </div>
-                ))}
-              </div>
+                </div>
+              ))}
             </div>
+
+            {/* Divider */}
+            <div className="success-divider" />
+
+            {/* Conversion CTA */}
+            <div className="success-conversion">
+              <div className="success-conversion-heading">Want your own video testimonials?</div>
+              <div className="success-conversion-sub">Join thousands of businesses using Vouch to build trust and win more clients.</div>
+              <a href="https://vouchbusiness.com" target="_blank" rel="noopener noreferrer" className="success-cta-btn">
+                Get my free Vouch profile →
+              </a>
+              <div className="success-cta-microcopy">Free forever &nbsp;·&nbsp; No credit card required &nbsp;·&nbsp; Setup in 2 minutes</div>
+            </div>
+
+            {/* Footer */}
+            <div className="success-footer">
+              Powered by <a href="https://vouchbusiness.com" target="_blank" rel="noopener noreferrer">Vouch</a> — the trust platform for modern businesses
+            </div>
+
             {onBack && (
-              <button className="btn btn-outline" style={{ color: "#666", borderColor: "#333", marginTop: 24 }} onClick={onBack}>
+              <button className="btn btn-outline" style={{ color: "#666", borderColor: "#333", marginTop: 20 }} onClick={onBack}>
                 ← Back to app
               </button>
             )}
