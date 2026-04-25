@@ -3285,6 +3285,7 @@ function Dashboard({ onPreview, userId, db, storage, onUpgrade }) {
   const [playbackTarget, setPlaybackTarget] = useState(null);
   const [editTarget, setEditTarget] = useState(null);
   const [downloadDropdown, setDownloadDropdown] = useState(null);
+  const [reprocessingIds, setReprocessingIds] = useState(new Set());
 
   const [campaigns, setCampaigns] = useState([]);
   const [testimonials, setTestimonials] = useState([]);
@@ -3765,6 +3766,35 @@ function Dashboard({ onPreview, userId, db, storage, onUpgrade }) {
                         ▶ Watch
                       </button>
                     )}
+                    {t.videoURLs && Object.keys(t.videoURLs).length > 0 && (() => {
+                      const isReprocessing = reprocessingIds.has(t.id);
+                      const isDone = isReprocessing && t.status === "processed";
+                      const isPending = isReprocessing && t.status !== "processed";
+                      return (
+                        <button
+                          className="btn btn-sm btn-outline"
+                          disabled={isPending}
+                          style={{
+                            color: isDone ? "#6dbf8a" : isPending ? "#7eb8f7" : "#888",
+                            borderColor: isDone ? "#6dbf8a" : isPending ? "#7eb8f7" : "#333",
+                            cursor: isPending ? "default" : "pointer",
+                            display: "flex", alignItems: "center", gap: 5,
+                          }}
+                          onClick={async () => {
+                            if (isPending) return;
+                            setReprocessingIds(prev => new Set([...prev, t.id]));
+                            await db.collection("users").doc(userId).collection("testimonials")
+                              .doc(t.id).update({ status: "new" }).catch(console.error);
+                          }}>
+                          {isDone ? "Done ✓" : isPending ? (
+                            <>
+                              <span style={{ width: 10, height: 10, borderRadius: "50%", border: "2px solid #7eb8f7", borderTopColor: "transparent", animation: "spin 0.8s linear infinite", display: "inline-block", flexShrink: 0 }} />
+                              Processing…
+                            </>
+                          ) : "↺ Reprocess"}
+                        </button>
+                      );
+                    })()}
                     <div style={{ position: "relative" }}>
                       <button
                         className="btn btn-sm btn-outline"
