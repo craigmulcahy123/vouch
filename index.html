@@ -2594,9 +2594,19 @@ function VideoEditor({ testimonial, onClose }) {
 
 // ── Video Playback Modal ──────────────────────────────────────────────────────
 function VideoPlaybackModal({ testimonial, onClose }) {
-  const rawURLs = testimonial.videoURLs || {};
-  // Sort numerically so Q1, Q2, Q3... are always in order
-  const keys    = Object.keys(rawURLs).sort((a, b) => Number(a) - Number(b));
+  // Prefer processedVideoURLs (merged MP4s from FFmpeg); fall back to raw per-question clips
+  const processed    = testimonial.processedVideoURLs || {};
+  const FORMAT_ORDER = ["landscape", "portrait", "square"];
+  const hasProcessed = FORMAT_ORDER.some(k => processed[k]?.url);
+
+  const rawURLs = hasProcessed
+    ? Object.fromEntries(FORMAT_ORDER.filter(k => processed[k]?.url).map(k => [k, processed[k].url]))
+    : (testimonial.videoURLs || {});
+
+  // For processed: landscape/portrait/square order. For raw: numeric Q1/Q2/Q3 order.
+  const keys    = hasProcessed
+    ? FORMAT_ORDER.filter(k => rawURLs[k])
+    : Object.keys(rawURLs).sort((a, b) => Number(a) - Number(b));
   const prompts = testimonial.prompts || [];
 
   const [activeIdx, setActiveIdx]   = useState(keys[0] ?? null);
@@ -2613,9 +2623,9 @@ function VideoPlaybackModal({ testimonial, onClose }) {
   // Log stored URLs once on open — useful for debugging
   useEffect(() => {
     console.log("[vouch/watch] opening modal —", testimonial.clientName);
-    console.log("[vouch/watch] videoURLs from Firestore:", rawURLs);
-    console.log("[vouch/watch] keys (sorted):", keys);
-    if (keys.length === 0) console.warn("[vouch/watch] ⚠ no videoURLs found on this testimonial");
+    console.log("[vouch/watch] hasProcessed:", hasProcessed, "| processedVideoURLs:", processed);
+    console.log("[vouch/watch] urlMap:", rawURLs, "| keys:", keys);
+    if (keys.length === 0) console.warn("[vouch/watch] ⚠ no video URLs found on this testimonial");
   }, []);
 
   // When the active clip index changes, refresh the URL and load the video
@@ -2739,8 +2749,11 @@ function VideoPlaybackModal({ testimonial, onClose }) {
             {keys.map(idx => (
               <button key={idx} className={`video-clip-tab ${activeIdx === idx ? "active" : ""}`}
                 onClick={() => setActiveIdx(idx)}>
-                Q{Number(idx) + 1}
-                {prompts[Number(idx)] && (
+                {hasProcessed
+                  ? (idx === "landscape" ? "16:9" : idx === "portrait" ? "9:16" : "1:1")
+                  : `Q${Number(idx) + 1}`
+                }
+                {!hasProcessed && prompts[Number(idx)] && (
                   <span style={{ display: "block", fontSize: "0.72rem", opacity: 0.7, maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {prompts[Number(idx)]}
                   </span>

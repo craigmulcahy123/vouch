@@ -261,6 +261,10 @@
     }
 
     function firstVideoUrl(t) {
+      const p = t.processedVideoURLs || {};
+      if (p.landscape?.url) return p.landscape.url;
+      if (p.portrait?.url)  return p.portrait.url;
+      if (p.square?.url)    return p.square.url;
       const urls = t.videoURLs || {};
       const keys = Object.keys(urls).sort();
       return keys.length > 0 ? urls[keys[0]] : null;
