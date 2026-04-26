@@ -1648,12 +1648,15 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
     setCameraAvailable(null); // reset so placeholder shows correctly
   }, [step]);
 
-  // Wire live stream to video element
+  // Wire live stream to video element.
+  // Must also depend on recordPhase: going from idle→recording changes the JSX key
+  // when reviewPhase differs, but idle→recording shares the same "live" key slot, so
+  // we need this to re-fire any time recordPhase flips while liveStream is active.
   useEffect(() => {
-    if (!videoRef.current || !liveStream) return;
+    if (!videoRef.current || !liveStream || recordPhase === "reviewing") return;
     videoRef.current.srcObject = liveStream;
     videoRef.current.play().catch(() => {});
-  }, [liveStream]);
+  }, [liveStream, recordPhase]);
 
   // Fetch talking points for all questions once on mount
   useEffect(() => {
@@ -1756,7 +1759,18 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
   function openCamera() {
     if (!navigator.mediaDevices?.getUserMedia) { setCameraAvailable(false); return; }
     navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-      .then(stream => { setCameraAvailable(true); streamRef.current = stream; setLiveStream(stream); })
+      .then(stream => {
+        streamRef.current = stream;
+        setCameraAvailable(true);
+        setLiveStream(stream);
+        // Set srcObject immediately — don't wait for the React effect cycle.
+        // This is the most reliable path on iOS where play() must happen in the
+        // same microtask as the user gesture that triggered getUserMedia.
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.play().catch(() => {});
+        }
+      })
       .catch(() => setCameraAvailable(false));
   }
 
@@ -2024,7 +2038,7 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
           <div className="cp-camera-wrap">
             {(liveStream || recordPhase === "reviewing") ? (
               <video
-                key={`vid-${step}-${recordPhase}`}
+                key={`vid-${step}-${recordPhase === "reviewing" ? "review" : "live"}`}
                 ref={videoRef}
                 playsInline
                 autoPlay={recordPhase !== "reviewing"}
