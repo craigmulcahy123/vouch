@@ -352,8 +352,8 @@ const style = `
     padding: 18px 40px; border-bottom: 1px solid var(--border);
     background: var(--paper); position: sticky; top: 0; z-index: 100;
   }
-  .nav-logo { font-family: 'Instrument Serif', serif; font-size: 1.5rem; letter-spacing: -0.02em; }
-  .nav-logo span { color: var(--gold); font-style: italic; }
+  .nav-logo { font-family: 'Instrument Serif', serif; font-size: 1.9rem; font-weight: 600; letter-spacing: -0.02em; }
+  .nav-logo span { color: #B8956A; }
   .nav-tabs { display: flex; gap: 4px; background: var(--cream); border-radius: 10px; padding: 4px; }
   .nav-tab {
     padding: 7px 18px; border-radius: 7px; border: none; background: transparent;
@@ -396,11 +396,38 @@ const style = `
   }
   .score-share-btn:hover { background: #c8a96e22; border-color: #c8a96e; }
 
+  /* Hero card */
+  .hero-card { background: #1A1612; border-radius: 12px; padding: 28px; display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr; gap: 32px; margin-bottom: 20px; align-items: start; }
+  .hero-score-label { font-size: 11px; font-weight: 700; color: #B8956A; text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 8px; }
+  .hero-score-num { font-family: 'Instrument Serif', serif; font-size: 52px; font-weight: 500; letter-spacing: -0.02em; color: #F5EFE3; line-height: 1; }
+  .hero-score-sub { font-size: 12px; color: rgba(245,239,227,0.55); margin-bottom: 14px; margin-top: 4px; }
+  .hero-score-btn { padding: 6px 14px; font-size: 12px; font-weight: 600; color: #D4B07F; background: rgba(212,176,127,0.1); border: 0.5px solid rgba(184,149,106,0.5); border-radius: 20px; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: background 0.15s; }
+  .hero-score-btn:hover { background: rgba(212,176,127,0.2); }
+  .hero-stat-col { border-left: 0.5px solid rgba(245,239,227,0.12); padding-left: 24px; }
+  .hero-stat-label { font-size: 11px; font-weight: 700; color: rgba(245,239,227,0.55); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 10px; }
+  .hero-stat-num { font-family: 'Instrument Serif', serif; font-size: 36px; font-weight: 500; color: #F5EFE3; line-height: 1; }
+  /* Pipeline strip */
+  .pipeline-strip { background: #fff; border: 0.5px solid rgba(26,22,18,0.08); border-radius: 12px; padding: 18px 24px; margin-bottom: 24px; }
+  .pipeline-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .pipeline-lbl { font-size: 11px; font-weight: 700; color: #6B6259; text-transform: uppercase; letter-spacing: 0.12em; }
+  .pipeline-link-btn { font-size: 12px; font-weight: 600; color: #B8956A; cursor: pointer; border: none; background: none; font-family: 'DM Sans', sans-serif; padding: 0; }
+  .pipeline-link-btn:hover { text-decoration: underline; }
+  .pipeline-cols { display: grid; grid-template-columns: repeat(5, 1fr); }
+  .pipeline-col { text-align: center; padding: 0 8px; border-left: 0.5px solid rgba(26,22,18,0.08); }
+  .pipeline-col:first-child { border-left: none; padding-left: 0; }
+  .pipeline-num { font-family: 'Instrument Serif', serif; font-size: 22px; font-weight: 500; color: #1A1612; line-height: 1; margin-bottom: 4px; }
+  .pipeline-num.gold { color: #B8956A; }
+  .pipeline-stage-label { font-size: 11px; color: #6B6259; }
+  @media (max-width: 700px) {
+    .hero-card { grid-template-columns: 1fr 1fr; }
+    .pipeline-cols { grid-template-columns: repeat(3, 1fr); }
+  }
+
   /* Campaign creator */
   .section-title { font-family: 'Instrument Serif', serif; font-size: 1.5rem; margin-bottom: 20px; }
   .campaign-card {
     background: var(--card); border: 1px solid var(--border); border-radius: 16px;
-    padding: 32px; margin-bottom: 32px;
+    padding: 18px 22px; margin-bottom: 16px;
   }
   .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
   .field { display: flex; flex-direction: column; gap: 6px; }
@@ -756,11 +783,12 @@ const style = `
 
   .tabs-inner { display: flex; gap: 4px; margin-bottom: 24px; }
   .tab-inner {
-    padding: 8px 18px; border-radius: 8px; border: none; background: transparent;
+    padding: 7px 14px; border-radius: 8px; border: 1px solid transparent; background: transparent;
     font-family: 'DM Sans', sans-serif; font-size: 0.85rem; font-weight: 500;
-    color: var(--muted); cursor: pointer; transition: all 0.2s;
+    color: #6B6259; cursor: pointer; transition: all 0.15s;
+    display: inline-flex; align-items: center; gap: 6px;
   }
-  .tab-inner.active { background: var(--cream); color: var(--ink); font-weight: 600; }
+  .tab-inner.active { background: #fff; color: #1A1612; font-weight: 600; border-color: rgba(26,22,18,0.08); }
 
   /* ── Invite Modal ── */
   .modal-overlay {
@@ -3345,6 +3373,7 @@ function Dashboard({ onPreview, userId, db, storage, onUpgrade }) {
   const [prompts, setPrompts] = useState([]);
   const [generating, setGenerating] = useState(false);
   const [copiedId, setCopiedId] = useState(null);
+  const [campaignKebab, setCampaignKebab] = useState(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
 
@@ -3446,11 +3475,6 @@ function Dashboard({ onPreview, userId, db, storage, onUpgrade }) {
           {dbError.includes("index") && <span> — open the Firebase Console link in the browser console to create the required index.</span>}
         </div>
       )}
-      <div className="dash-header">
-        <div className="dash-title serif">Your Dashboard</div>
-        <div className="dash-subtitle">Manage campaigns and review incoming testimonials</div>
-      </div>
-
       {(() => {
         const approved = testimonials.filter(t => t.status === "approved");
         const approvedCount = approved.length;
@@ -3464,69 +3488,93 @@ function Dashboard({ onPreview, userId, db, storage, onUpgrade }) {
           setScoreCopied(true);
           setTimeout(() => setScoreCopied(false), 2000);
         }
+        const pInvited   = invites.filter(i => i.status === "invited").length;
+        const pOpened    = invites.filter(i => i.status === "opened").length;
+        const pRecorded  = invites.filter(i => i.status === "recorded").length;
+        const pApproved  = invites.filter(i => i.status === "approved").length;
+        const pDelivered = invites.filter(i => i.status === "delivered").length;
         return (
-          <div className="stats-row">
-            <div className="stat-card">
-              <div className="stat-num serif">{campaigns.length}</div>
-              <div className="stat-label">Active Campaigns</div>
+          <>
+            {/* ── Hero card ── */}
+            <div className="hero-card">
+              {/* Score column */}
+              <div>
+                <div className="hero-score-label">✦ Vouch Score</div>
+                {vouchScore !== null ? (
+                  <>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 4 }}>
+                      <span className="hero-score-num">{vouchScore.toFixed(1)}</span>
+                      <span style={{ fontSize: 26, color: "#B8956A", lineHeight: 1 }}>★</span>
+                    </div>
+                    <div className="hero-score-sub">from {approvedCount} verified testimonial{approvedCount !== 1 ? "s" : ""}</div>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <button className="hero-score-btn" onClick={shareScore}>{scoreCopied ? "✓ Copied!" : "Copy link"}</button>
+                      <button className="hero-score-btn" onClick={() => window.open(`https://vouchbusiness.com/profile/${userId}`, "_blank")}>View profile →</button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ fontFamily: "'Instrument Serif', serif", fontSize: 40, fontWeight: 500, color: "rgba(245,239,227,0.3)", lineHeight: 1, marginBottom: 6 }}>—</div>
+                    <div className="hero-score-sub">Approve {Math.max(0, 3 - approvedCount)} more testimonial{3 - approvedCount !== 1 ? "s" : ""} to unlock</div>
+                    <div style={{ display: "flex", gap: 4, marginTop: 10 }}>
+                      {[0,1,2].map(i => (
+                        <div key={i} style={{ height: 3, flex: 1, borderRadius: 2, background: i < approvedCount ? "#B8956A" : "rgba(245,239,227,0.12)" }} />
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+              {/* Stats columns */}
+              {[
+                { label: "Active Campaigns", value: campaigns.length },
+                { label: "Received",         value: testimonials.length },
+                { label: "Approved",         value: approvedCount },
+              ].map(({ label, value }) => (
+                <div key={label} className="hero-stat-col">
+                  <div className="hero-stat-label">{label}</div>
+                  <div className="hero-stat-num">{value}</div>
+                </div>
+              ))}
             </div>
-            <div className="stat-card">
-              <div className="stat-num serif">{testimonials.length}</div>
-              <div className="stat-label">Received</div>
+
+            {/* ── Pipeline strip ── */}
+            <div className="pipeline-strip">
+              <div className="pipeline-header">
+                <span className="pipeline-lbl">Pipeline</span>
+                <button className="pipeline-link-btn" onClick={() => setInnerTab("invites")}>View all invites →</button>
+              </div>
+              <div className="pipeline-cols">
+                {[
+                  { stage: "Invited",   count: pInvited,   gold: false },
+                  { stage: "Opened",    count: pOpened,    gold: false },
+                  { stage: "Recorded",  count: pRecorded,  gold: false },
+                  { stage: "Approved",  count: pApproved,  gold: false },
+                  { stage: "Delivered", count: pDelivered, gold: true  },
+                ].map(({ stage, count, gold }) => (
+                  <div key={stage} className="pipeline-col">
+                    <div className={`pipeline-num${gold ? " gold" : ""}`}>{count}</div>
+                    <div className="pipeline-stage-label">{stage}</div>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="stat-card">
-              <div className="stat-num serif">{approvedCount}</div>
-              <div className="stat-label">Approved</div>
-            </div>
-            <div className="stat-card score-card">
-              {vouchScore !== null ? (
-                <>
-                  <div style={{ fontSize: "0.7rem", fontWeight: 700, color: "#c8a96e", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>
-                    ✦ Vouch Score
-                  </div>
-                  <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-                    <div className="stat-num score-num">{vouchScore.toFixed(1)}</div>
-                    <div style={{ fontSize: "1.4rem", lineHeight: 1 }}>⭐</div>
-                  </div>
-                  <div style={{ fontSize: "0.78rem", color: "#888", marginTop: 2 }}>
-                    from {approvedCount} verified testimonial{approvedCount !== 1 ? "s" : ""}
-                  </div>
-                  <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
-                    <button className="score-share-btn" style={{ marginTop: 0 }} onClick={shareScore}>
-                      {scoreCopied ? "✓ Copied!" : "Copy link"}
-                    </button>
-                    <button className="score-share-btn" style={{ marginTop: 0 }}
-                      onClick={() => window.open(`https://vouchbusiness.com/profile/${userId}`, "_blank")}>
-                      View profile →
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div style={{ fontSize: "0.7rem", fontWeight: 700, color: "#c8a96e", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>
-                    ✦ Vouch Score
-                  </div>
-                  <div className="score-pending">
-                    Approve {Math.max(0, 3 - approvedCount)} more testimonial{3 - approvedCount !== 1 ? "s" : ""} to unlock your score
-                  </div>
-                  <div style={{ marginTop: 8, display: "flex", gap: 4 }}>
-                    {[0,1,2].map(i => (
-                      <div key={i} style={{ height: 4, flex: 1, borderRadius: 2, background: i < approvedCount ? "#c8a96e" : "#2a2a2a" }} />
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
+          </>
         );
       })()}
 
       <div className="tabs-inner">
-        {[["campaigns","📋 Campaigns"],["testimonials","⭐ Testimonials"],["invites","📬 Invites"],["billing","💳 Plan & Billing"],["profile","👤 Profile"]].map(([key, label]) => (
+        {[
+          { key: "campaigns",    label: "Campaigns",     icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg> },
+          { key: "testimonials", label: "Testimonials",  icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg> },
+          { key: "invites",      label: "Invites",       icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg> },
+          { key: "billing",      label: "Plan & Billing",icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg> },
+          { key: "profile",      label: "Profile",       icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> },
+        ].map(({ key, label, icon }) => (
           <button key={key} className={`tab-inner ${innerTab === key ? "active" : ""}`} onClick={() => setInnerTab(key)}>
+            {icon}
             {label}
             {key === "invites" && invites.filter(i => i.status === "recorded").length > 0 && (
-              <span style={{ marginLeft: 6, background: "var(--gold)", color: "#fff", borderRadius: 20, fontSize: "0.65rem", fontWeight: 700, padding: "1px 6px" }}>
+              <span style={{ marginLeft: 2, background: "var(--gold)", color: "#fff", borderRadius: 20, fontSize: "0.65rem", fontWeight: 700, padding: "1px 6px" }}>
                 {invites.filter(i => i.status === "recorded").length}
               </span>
             )}
@@ -3565,8 +3613,10 @@ function Dashboard({ onPreview, userId, db, storage, onUpgrade }) {
         <>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
             <div className="section-title serif" style={{ margin: 0 }}>Campaigns</div>
-            <button className="btn btn-primary" onClick={() => setShowCreate(!showCreate)}>
-              {showCreate ? "✕ Cancel" : "+ New Campaign"}
+            <button style={{ background: "#1A1612", color: "#F5EFE3", border: "none", padding: "9px 16px", borderRadius: 7, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", fontWeight: 600, fontSize: "0.88rem", display: "inline-flex", alignItems: "center", gap: 6 }} onClick={() => setShowCreate(!showCreate)}>
+              {showCreate ? "✕ Cancel" : (
+                <>{/* plus icon */}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>New campaign</>
+              )}
             </button>
           </div>
 
@@ -3647,35 +3697,45 @@ function Dashboard({ onPreview, userId, db, storage, onUpgrade }) {
 
           <div className="testimonials-grid">
             {campaigns.map(c => (
-              <div key={c.id} className="campaign-card" style={{ display: "block" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
-                  <div>
-                    <div style={{ fontWeight: 600, marginBottom: 3 }}>{c.name}</div>
-                    <div style={{ color: "var(--muted)", fontSize: "0.82rem" }}>{c.companyName} · {c.industry}</div>
+              <div key={c.id} className="campaign-card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+                {/* Left: name + meta */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
+                    <div style={{ fontWeight: 600, color: "var(--ink)", fontSize: "0.95rem" }}>{c.name}</div>
+                    <span style={{ fontSize: "0.65rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", padding: "2px 8px", borderRadius: 20, background: c.status === "paused" ? "rgba(26,22,18,0.07)" : "rgba(99,153,34,0.12)", color: c.status === "paused" ? "#6B6259" : "#3B6D11", flexShrink: 0 }}>
+                      {c.status === "paused" ? "Paused" : "Active"}
+                    </span>
                   </div>
-                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <button className="btn btn-outline btn-sm" onClick={() => onPreview(c)}>Preview</button>
-                    <button className="btn btn-gold btn-sm" onClick={() => setInviteTarget(c)}>✉ Invite Client</button>
-                    <button className="btn btn-primary btn-sm" onClick={() => copyLink(c.id)}>
-                      {copiedId === c.id ? "✓ Copied!" : "Copy Link"}
-                    </button>
-                    <button
-                      className="btn btn-outline btn-sm"
-                      style={{ color: "#666", borderColor: "#333" }}
-                      onMouseEnter={e => { e.currentTarget.style.color = "#e05c5c"; e.currentTarget.style.borderColor = "#e05c5c"; }}
-                      onMouseLeave={e => { e.currentTarget.style.color = "#666"; e.currentTarget.style.borderColor = "#333"; }}
-                      onClick={() => {
-                        if (window.confirm("Are you sure you want to delete this campaign? This cannot be undone.")) {
-                          db.collection("users").doc(userId).collection("campaigns").doc(c.id).delete().catch(console.error);
-                        }
-                      }}>
-                      🗑
-                    </button>
-                  </div>
+                  <div style={{ color: "var(--muted)", fontSize: "0.8rem" }}>{c.companyName} · {c.industry} · {c.prompts.length} question{c.prompts.length !== 1 ? "s" : ""}</div>
                 </div>
-                <div style={{ color: "var(--muted)", fontSize: "0.8rem", marginBottom: 10 }}>{c.prompts.length} questions</div>
-                <div className="link-box">
-                  <span className="link-url">vouchbusiness.com/record/{c.id}?owner={userId}</span>
+                {/* Right: actions */}
+                <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
+                  <button className="btn btn-sm" style={{ background: "#B8956A", color: "#fff", border: "none" }} onClick={() => setInviteTarget(c)}>✉ Invite client</button>
+                  <button className="btn btn-outline btn-sm" onClick={() => copyLink(c.id)}>{copiedId === c.id ? "✓ Copied" : "Copy link"}</button>
+                  <button className="btn btn-outline btn-sm" onClick={() => onPreview(c)}>Preview</button>
+                  {/* Kebab */}
+                  <div style={{ position: "relative" }}>
+                    <button className="btn btn-outline btn-sm" style={{ padding: "7px 10px", color: "var(--muted)" }} onClick={() => setCampaignKebab(campaignKebab === c.id ? null : c.id)}>⋮</button>
+                    {campaignKebab === c.id && (
+                      <>
+                        <div style={{ position: "fixed", inset: 0, zIndex: 99 }} onClick={() => setCampaignKebab(null)} />
+                        <div style={{ position: "absolute", right: 0, top: "calc(100% + 4px)", background: "var(--card)", border: "1px solid var(--border)", borderRadius: 10, padding: 6, minWidth: 160, zIndex: 100, boxShadow: "0 4px 20px rgba(0,0,0,0.12)" }}>
+                          <button
+                            style={{ display: "block", width: "100%", background: "none", border: "none", padding: "9px 12px", textAlign: "left", color: "#e05c5c", fontSize: "0.86rem", cursor: "pointer", borderRadius: 6, fontFamily: "'DM Sans', sans-serif" }}
+                            onMouseEnter={e => e.currentTarget.style.background = "#2a1010"}
+                            onMouseLeave={e => e.currentTarget.style.background = "none"}
+                            onClick={() => {
+                              setCampaignKebab(null);
+                              if (window.confirm("Are you sure you want to delete this campaign? This cannot be undone.")) {
+                                db.collection("users").doc(userId).collection("campaigns").doc(c.id).delete().catch(console.error);
+                              }
+                            }}>
+                            🗑 Delete campaign
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}
@@ -4743,21 +4803,21 @@ function App() {
         ) : (
           <>
             <nav className="nav">
-              <button className="nav-logo serif" style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }} onClick={() => setView("dashboard")}>Vouch<span>✦</span></button>
-              <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
+                <button className="nav-logo serif" style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }} onClick={() => setView("dashboard")}>Vouch<span>✦</span></button>
                 <div className="nav-tabs">
                   <button className={`nav-tab ${view === "dashboard" ? "active" : ""}`} onClick={() => setView("dashboard")}>Dashboard</button>
                   <button className="nav-tab" onClick={() => handlePreview(null)}>Client View</button>
                 </div>
-                {demoMode ? (
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ fontSize: "0.75rem", color: "var(--muted)", background: "var(--cream)", padding: "4px 10px", borderRadius: 20 }}>Demo mode</span>
-                    <button className="btn btn-outline btn-sm" onClick={() => { setDemoMode(false); setView("auth"); }}>Sign in</button>
-                  </div>
-                ) : (
-                  <UserMenu user={activeUser} auth={auth} />
-                )}
               </div>
+              {demoMode ? (
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: "0.75rem", color: "var(--muted)", background: "var(--cream)", padding: "4px 10px", borderRadius: 20 }}>Demo mode</span>
+                  <button className="btn btn-outline btn-sm" onClick={() => { setDemoMode(false); setView("auth"); }}>Sign in</button>
+                </div>
+              ) : (
+                <UserMenu user={activeUser} auth={auth} />
+              )}
             </nav>
             {upgradedBanner && (
               <div style={{ margin: "16px 20px 0", padding: "13px 18px", background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
