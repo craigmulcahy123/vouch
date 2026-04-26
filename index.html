@@ -1321,11 +1321,11 @@ function buildEmailHTML({ clientName, companyName, campaignName, prompts, record
 }
 
 // ── Send invite via Resend ────────────────────────────────────────────────────
-async function sendInviteEmail({ toEmail, clientName, campaign, inviteId }) {
+async function sendInviteEmail({ toEmail, clientName, campaign, inviteId, ownerEmail }) {
   const res = await fetch("/api/send-invite", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ toEmail, clientName, campaign, inviteId }),
+    body: JSON.stringify({ toEmail, clientName, campaign, inviteId, ownerEmail }),
   });
   if (!res.ok) {
     const err = await res.json();
@@ -1335,7 +1335,7 @@ async function sendInviteEmail({ toEmail, clientName, campaign, inviteId }) {
 }
 
 // ── Invite Modal ──────────────────────────────────────────────────────────────
-function InviteModal({ campaign, db, userId, onClose }) {
+function InviteModal({ campaign, db, userId, ownerEmail, onClose }) {
   const [clientName, setClientName] = useState("");
   const [toEmail, setToEmail] = useState("");
   const [status, setStatus] = useState(null); // null | "sending" | "success" | "error"
@@ -1407,7 +1407,7 @@ function InviteModal({ campaign, db, userId, onClose }) {
     // 2. Send the email (includes ?inviteId=...&owner=... in the recording link)
     console.log("[vouch/invite] sending email to", toEmail, "with inviteId:", inviteId);
     try {
-      await sendInviteEmail({ toEmail, clientName, campaign, inviteId });
+      await sendInviteEmail({ toEmail, clientName, campaign, inviteId, ownerEmail });
       console.log("[vouch/invite] ✅ email sent");
       setStatus("success");
     } catch (e) {
@@ -2974,6 +2974,7 @@ function InvitesKanban({ invites, db, userId, onReview }) {
         clientName: invite.clientName,
         campaign: { id: invite.campaignId, name: invite.campaignName, companyName: invite.companyName, prompts: [] },
         inviteId: invite.id,
+        ownerEmail: userEmail,
       });
       alert(`Re-sent to ${invite.toEmail}`);
     } catch (e) {
@@ -3269,7 +3270,7 @@ function ProfileSettings({ db, userId, storage }) {
 }
 
 // ── Dashboard ──────────────────────────────────────────────────────────────
-function Dashboard({ onPreview, userId, db, storage, onUpgrade }) {
+function Dashboard({ onPreview, userId, userEmail, db, storage, onUpgrade }) {
   const [innerTab, setInnerTab] = useState("campaigns");
 
   // Plan state — loaded from Firestore users/{userId}.plan; defaults to "free"
@@ -3466,7 +3467,7 @@ function Dashboard({ onPreview, userId, db, storage, onUpgrade }) {
 
   return (
     <div className="dashboard">
-      {inviteTarget && <InviteModal campaign={inviteTarget} db={db} userId={userId} onClose={() => setInviteTarget(null)} />}
+      {inviteTarget && <InviteModal campaign={inviteTarget} db={db} userId={userId} ownerEmail={userEmail} onClose={() => setInviteTarget(null)} />}
       {playbackTarget && <VideoPlaybackModal testimonial={playbackTarget} onClose={() => setPlaybackTarget(null)} />}
       {editTarget && <VideoEditor testimonial={editTarget} onClose={() => setEditTarget(null)} />}
       {dbError && (
@@ -4825,7 +4826,7 @@ function App() {
                 <button onClick={() => setUpgradedBanner(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#166534", fontSize: "1.2rem", lineHeight: 1, flexShrink: 0, padding: 0 }}>×</button>
               </div>
             )}
-            <Dashboard onPreview={handlePreview} userId={activeUser.uid} db={db} storage={storage} onUpgrade={() => setView("pricing")} />
+            <Dashboard onPreview={handlePreview} userId={activeUser.uid} userEmail={activeUser.email} db={db} storage={storage} onUpgrade={() => setView("pricing")} />
             <VouchFooter />
           </>
         )}
