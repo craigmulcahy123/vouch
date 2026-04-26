@@ -2665,7 +2665,9 @@ function VideoPlaybackModal({ testimonial, onClose }) {
     if (keys.length === 0) console.warn("[vouch/watch] ⚠ no video URLs found on this testimonial");
   }, []);
 
-  // When the active clip index changes, refresh the URL and load the video
+  // When the active clip index changes, refresh the URL and load the video.
+  // `video` is captured at effect-start time so the cleanup closure holds the
+  // right element even if videoRef.current has moved on (e.g. key remount).
   useEffect(() => {
     const video = videoRef.current;
     if (!video || activeIdx === null) return;
@@ -2680,6 +2682,13 @@ function VideoPlaybackModal({ testimonial, onClose }) {
 
     // Reset state for the new clip
     setErrored(false); setErrMsg(""); setTapToPlay(false); setLoadingURL(true);
+
+    // Stop any currently playing video before we start loading the new one.
+    // This is critical in React Strict Mode (double-invoke) where the cleanup
+    // fires between Effect-A and Effect-B — without pause(), Effect-A's canplay
+    // handler can start playback that Effect-B's load() then abruptly stops,
+    // producing "plays for ~1 s then goes black".
+    video.pause();
 
     // Remove any stale canplay handler from a previous load
     if (canPlayHandlerRef.current) {
@@ -2715,9 +2724,13 @@ function VideoPlaybackModal({ testimonial, onClose }) {
       setFreshURLs(prev => ({ ...prev, [activeIdx]: url }));
       setLoadingURL(false);
 
+      // Guard again: the cleanup could have fired between the state setters
+      // and the DOM write if this async chain was interleaved with a new effect run.
+      if (cancelled) return;
+
       // Setting src + load() prepares the media — do NOT call play() yet.
-      // Instead, play() is called from the canplay event, ensuring the browser
-      // has decoded at least the first frame before we ask it to play.
+      // play() is called from the canplay event, ensuring the browser has decoded
+      // at least the first frame before we ask it to play.
       video.src = url;
       video.load();
 
@@ -2737,6 +2750,9 @@ function VideoPlaybackModal({ testimonial, onClose }) {
 
     return () => {
       cancelled = true;
+      // Pause the captured element — stops audio/video if playback had started
+      // and prevents a half-loaded stream from continuing in the background.
+      video.pause();
       if (canPlayHandlerRef.current) {
         video.removeEventListener("canplay", canPlayHandlerRef.current);
         canPlayHandlerRef.current = null;
@@ -2813,14 +2829,19 @@ function VideoPlaybackModal({ testimonial, onClose }) {
               </div>
             )}
 
-            {/* The video element — no crossOrigin so CORS doesn't block plain playback */}
+            {/* key=activeIdx gives each clip a fresh element — no stale src/buffer/
+                readyState leaking from the previous clip into the next one. */}
             <video
+              key={activeIdx}
               ref={videoRef}
               controls
               playsInline
               preload="auto"
               onPlaying={handlePlaying}
               onError={handleError}
+              onWaiting={() => console.log("[vouch/watch] waiting — buffering…")}
+              onStalled={() => { console.warn("[vouch/watch] stalled — network slow or URL unreachable"); setTapToPlay(true); }}
+              onSuspend={() => console.log("[vouch/watch] suspend — browser paused download")}
               style={{ width: "100%", display: "block" }}
             />
 
