@@ -2640,134 +2640,110 @@ function VideoPlaybackModal({ testimonial, onClose }) {
     ? Object.fromEntries(FORMAT_ORDER.filter(k => processed[k]?.url).map(k => [k, processed[k].url]))
     : (testimonial.videoURLs || {});
 
-  // For processed: landscape/portrait/square order. For raw: numeric Q1/Q2/Q3 order.
   const keys    = hasProcessed
     ? FORMAT_ORDER.filter(k => rawURLs[k])
     : Object.keys(rawURLs).sort((a, b) => Number(a) - Number(b));
   const prompts = testimonial.prompts || [];
 
-  const [activeIdx, setActiveIdx]   = useState(keys[0] ?? null);
-  const [freshURLs, setFreshURLs]   = useState({});
-  const [loadingURL, setLoadingURL] = useState(false);
-  const [tapToPlay, setTapToPlay]   = useState(false);
-  const [errored, setErrored]       = useState(false);
-  const [errMsg, setErrMsg]         = useState("");
+  const [activeIdx, setActiveIdx] = useState(keys[0] ?? null);
+  const [loading, setLoading]     = useState(false);
+  const [tapToPlay, setTapToPlay] = useState(false);
+  const [errored, setErrored]     = useState(false);
+  const [errMsg, setErrMsg]       = useState("");
+  const [displayURL, setDisplayURL] = useState(rawURLs[keys[0]] || "");
 
-  const videoRef = useRef(null);
-  // Holds the canplay handler so cleanup can remove it if the tab changes mid-load
-  const canPlayHandlerRef = useRef(null);
+  const videoRef  = useRef(null);
+  // Tracks which clip is "current" so a slow getDownloadURL for a stale
+  // clip doesn't overwrite a newer selection after the user clicks a tab.
+  const activeClipRef = useRef(null);
+  // Prevents React Strict Mode's double-invoke from loading the first clip twice.
+  const initRef = useRef(false);
 
-  // Log stored URLs once on open — useful for debugging
+  // Load the first clip once — imperatively, not driven by a state dependency.
   useEffect(() => {
-    console.log("[vouch/watch] opening modal —", testimonial.clientName);
-    console.log("[vouch/watch] hasProcessed:", hasProcessed, "| processedVideoURLs:", processed);
-    console.log("[vouch/watch] urlMap:", rawURLs, "| keys:", keys);
-    if (keys.length === 0) console.warn("[vouch/watch] ⚠ no video URLs found on this testimonial");
-  }, []);
+    if (initRef.current) return;
+    initRef.current = true;
+    console.log("[vouch/watch] opening —", testimonial.clientName, "| keys:", keys, "| rawURLs:", rawURLs);
+    if (keys[0] != null) playClip(keys[0]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // When the active clip index changes, refresh the URL and load the video.
-  // `video` is captured at effect-start time so the cleanup closure holds the
-  // right element even if videoRef.current has moved on (e.g. key remount).
-  useEffect(() => {
+  // All video loading is imperative — no effect reacting to activeIdx changes.
+  // This avoids the React cleanup / double-invoke cycle that was stopping playback.
+  async function playClip(idx) {
     const video = videoRef.current;
-    if (!video || activeIdx === null) return;
+    if (!video) return;
 
-    const storedURL = rawURLs[activeIdx];
+    // Mark this as the intended clip so a concurrent stale load can detect it lost.
+    activeClipRef.current = idx;
+
+    setActiveIdx(idx);
+    setLoading(true);
+    setErrored(false);
+    setErrMsg("");
+    setTapToPlay(false);
+
+    // Stop whatever was playing before we touch src.
+    video.pause();
+
+    const storedURL = rawURLs[idx];
     if (!storedURL) {
-      console.warn("[vouch/watch] no URL for key:", activeIdx);
+      console.warn("[vouch/watch] no URL for key:", idx);
+      setLoading(false);
       setErrored(true);
       setErrMsg("No video stored for this question.");
       return;
     }
 
-    // Reset state for the new clip
-    setErrored(false); setErrMsg(""); setTapToPlay(false); setLoadingURL(true);
-
-    // Stop any currently playing video before we start loading the new one.
-    // This is critical in React Strict Mode (double-invoke) where the cleanup
-    // fires between Effect-A and Effect-B — without pause(), Effect-A's canplay
-    // handler can start playback that Effect-B's load() then abruptly stops,
-    // producing "plays for ~1 s then goes black".
-    video.pause();
-
-    // Remove any stale canplay handler from a previous load
-    if (canPlayHandlerRef.current) {
-      video.removeEventListener("canplay", canPlayHandlerRef.current);
-      canPlayHandlerRef.current = null;
+    // Refresh the download URL so expired Firebase tokens are never a problem.
+    let url = storedURL;
+    try {
+      const ref = firebase.storage().refFromURL(storedURL);
+      url = await ref.getDownloadURL();
+      console.log("[vouch/watch] refreshed URL for", idx, "→", url.slice(0, 80) + "…");
+    } catch (e) {
+      console.warn("[vouch/watch] URL refresh failed, using stored URL:", e.message);
     }
 
-    let cancelled = false;
-
-    async function loadAndPlay() {
-      // Refresh the download URL so expired tokens are never a problem
-      let url = storedURL;
-      try {
-        const ref = firebase.storage().refFromURL(storedURL);
-        url = await ref.getDownloadURL();
-        console.log("[vouch/watch] refreshed URL for key", activeIdx, "→", url.slice(0, 80) + "…");
-      } catch (e) {
-        console.warn("[vouch/watch] URL refresh failed, using stored URL:", e.message);
-      }
-
-      if (cancelled) return;
-
-      // iOS Safari cannot play .webm — show a helpful message instead of a broken player
-      if (isIOSDevice() && isWebmUrl(url)) {
-        console.warn("[vouch/watch] iOS + .webm detected — showing compatibility notice");
-        setFreshURLs(prev => ({ ...prev, [activeIdx]: url }));
-        setLoadingURL(false);
-        setErrored(true);
-        setErrMsg("ios-webm");
-        return;
-      }
-
-      setFreshURLs(prev => ({ ...prev, [activeIdx]: url }));
-      setLoadingURL(false);
-
-      // Guard again: the cleanup could have fired between the state setters
-      // and the DOM write if this async chain was interleaved with a new effect run.
-      if (cancelled) return;
-
-      // Setting src + load() prepares the media — do NOT call play() yet.
-      // play() is called from the canplay event, ensuring the browser has decoded
-      // at least the first frame before we ask it to play.
-      video.src = url;
-      video.load();
-
-      const handler = () => {
-        canPlayHandlerRef.current = null;
-        console.log("[vouch/watch] canplay fired for key:", activeIdx);
-        video.play().catch(err => {
-          console.warn("[vouch/watch] play() blocked (autoplay policy):", err.name, "—", err.message);
-          setTapToPlay(true);
-        });
-      };
-      canPlayHandlerRef.current = handler;
-      video.addEventListener("canplay", handler, { once: true });
+    // If the user clicked a different tab while we were awaiting, abandon this load.
+    if (activeClipRef.current !== idx) {
+      console.log("[vouch/watch] clip", idx, "superseded — abandoning load");
+      return;
     }
 
-    loadAndPlay();
+    // iOS Safari cannot play .webm — show a helpful message instead of a broken player.
+    if (isIOSDevice() && isWebmUrl(url)) {
+      console.warn("[vouch/watch] iOS + .webm — showing compatibility notice");
+      setDisplayURL(url);
+      setLoading(false);
+      setErrored(true);
+      setErrMsg("ios-webm");
+      return;
+    }
 
-    return () => {
-      cancelled = true;
-      // Pause the captured element — stops audio/video if playback had started
-      // and prevents a half-loaded stream from continuing in the background.
-      video.pause();
-      if (canPlayHandlerRef.current) {
-        video.removeEventListener("canplay", canPlayHandlerRef.current);
-        canPlayHandlerRef.current = null;
-      }
-    };
-  }, [activeIdx]);
+    setDisplayURL(url);
+    setLoading(false);
 
-  function handlePlaying() { setTapToPlay(false); }
+    // Set src and load synchronously, then call play().
+    // The browser buffers internally; play() queues the request and starts
+    // as soon as enough data is ready. No canplay listener needed.
+    video.src = url;
+    video.load();
+    video.play().catch(err => {
+      console.warn("[vouch/watch] play() blocked:", err.name, "—", err.message);
+      setTapToPlay(true);
+    });
+  }
+
+  function handleTabClick(idx) {
+    if (idx === activeIdx) return;
+    playClip(idx);
+  }
 
   function handleError() {
     const video = videoRef.current;
     const code  = video?.error?.code;
     const msg   = video?.error?.message || "Unknown media error";
-    console.error("[vouch/watch] ❌ video error — MediaError code:", code, "| message:", msg);
-    console.error("[vouch/watch]    src was:", video?.src?.slice(0, 100));
+    console.error("[vouch/watch] ❌ MediaError", code, ":", msg, "| src:", video?.src?.slice(0, 80));
     setErrored(true);
     setErrMsg(`MediaError ${code}: ${msg}`);
     setTapToPlay(false);
@@ -2785,8 +2761,6 @@ function VideoPlaybackModal({ testimonial, onClose }) {
 
   if (keys.length === 0) return null;
 
-  const displayURL = freshURLs[activeIdx] || rawURLs[activeIdx];
-
   return (
     <div className="video-modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="video-modal">
@@ -2801,7 +2775,7 @@ function VideoPlaybackModal({ testimonial, onClose }) {
           <div className="video-clip-tabs">
             {keys.map(idx => (
               <button key={idx} className={`video-clip-tab ${activeIdx === idx ? "active" : ""}`}
-                onClick={() => setActiveIdx(idx)}>
+                onClick={() => handleTabClick(idx)}>
                 {hasProcessed
                   ? (idx === "landscape" ? "16:9" : idx === "portrait" ? "9:16" : "1:1")
                   : `Q${Number(idx) + 1}`
@@ -2817,91 +2791,85 @@ function VideoPlaybackModal({ testimonial, onClose }) {
         )}
 
         {/* Video player */}
-        {activeIdx !== null && (
-          <div style={{ position: "relative", borderRadius: 10, overflow: "hidden", background: "#000", minHeight: 180 }}>
-            {/* Loading spinner while URL is being refreshed */}
-            {loadingURL && (
+        <div style={{ position: "relative", borderRadius: 10, overflow: "hidden", background: "#000", minHeight: 180 }}>
+          {/* Spinner while Firebase URL is being refreshed */}
+          {loading && (
+            <div style={{
+              position: "absolute", inset: 0, display: "flex", alignItems: "center",
+              justifyContent: "center", background: "#000", zIndex: 10,
+            }}>
+              <div style={{ width: 36, height: 36, border: "3px solid #333", borderTopColor: "var(--gold)", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+            </div>
+          )}
+
+          {/* Single persistent video element — src is set imperatively in playClip(),
+              never via JSX props, so React re-renders can't interfere with playback. */}
+          <video
+            ref={videoRef}
+            controls
+            playsInline
+            preload="auto"
+            onPlaying={() => setTapToPlay(false)}
+            onError={handleError}
+            style={{ width: "100%", display: "block" }}
+          />
+
+          {/* Tap-to-play overlay — shown when autoplay policy blocks auto-start */}
+          {tapToPlay && !errored && (
+            <div onClick={handleTap} style={{
+              position: "absolute", inset: 0,
+              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+              background: "rgba(0,0,0,0.55)", cursor: "pointer", gap: 10,
+            }}>
               <div style={{
-                position: "absolute", inset: 0, display: "flex", alignItems: "center",
-                justifyContent: "center", background: "#000", zIndex: 10,
+                width: 64, height: 64, borderRadius: "50%",
+                background: "rgba(200,169,110,0.9)",
+                display: "flex", alignItems: "center", justifyContent: "center",
               }}>
-                <div style={{ width: 36, height: 36, border: "3px solid #333", borderTopColor: "var(--gold)", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z"/></svg>
               </div>
-            )}
+              <span style={{ color: "#fff", fontSize: "0.9rem", fontWeight: 600 }}>Tap to play</span>
+            </div>
+          )}
 
-            {/* key=activeIdx gives each clip a fresh element — no stale src/buffer/
-                readyState leaking from the previous clip into the next one. */}
-            <video
-              key={activeIdx}
-              ref={videoRef}
-              controls
-              playsInline
-              preload="auto"
-              onPlaying={handlePlaying}
-              onError={handleError}
-              onWaiting={() => console.log("[vouch/watch] waiting — buffering…")}
-              onStalled={() => { console.warn("[vouch/watch] stalled — network slow or URL unreachable"); setTapToPlay(true); }}
-              onSuspend={() => console.log("[vouch/watch] suspend — browser paused download")}
-              style={{ width: "100%", display: "block" }}
-            />
-
-            {/* Tap-to-play overlay — shown when autoplay policy blocks auto-start */}
-            {tapToPlay && !errored && (
-              <div onClick={handleTap} style={{
-                position: "absolute", inset: 0,
-                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-                background: "rgba(0,0,0,0.55)", cursor: "pointer", gap: 10,
-              }}>
-                <div style={{
-                  width: 64, height: 64, borderRadius: "50%",
-                  background: "rgba(200,169,110,0.9)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                }}>
-                  <svg width="28" height="28" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z"/></svg>
-                </div>
-                <span style={{ color: "#fff", fontSize: "0.9rem", fontWeight: 600 }}>Tap to play</span>
-              </div>
-            )}
-
-            {/* Error state */}
-            {errored && (
-              <div style={{
-                position: "absolute", inset: 0, display: "flex", flexDirection: "column",
-                alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.85)", gap: 10, padding: "0 28px",
-              }}>
-                {errMsg === "ios-webm" ? (
-                  <>
-                    <div style={{ fontSize: "2rem" }}>📱</div>
-                    <div style={{ color: "#f0ece4", fontSize: "0.92rem", textAlign: "center", fontWeight: 600 }}>
-                      Desktop recording — Safari not supported
-                    </div>
-                    <div style={{ color: "#888", fontSize: "0.8rem", textAlign: "center", lineHeight: 1.5 }}>
-                      This video was recorded on desktop (WebM format). Safari on iOS can't play WebM. Open on a desktop browser or use the link below.
-                    </div>
-                    {displayURL && (
-                      <a href={displayURL} target="_blank" rel="noopener noreferrer"
-                        style={{ color: "#c8a96e", fontSize: "0.85rem", textDecoration: "underline", marginTop: 4 }}>
-                        Open in new tab ↗
-                      </a>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <div style={{ fontSize: "2rem" }}>⚠️</div>
-                    <div style={{ color: "#e07a7a", fontSize: "0.88rem", textAlign: "center" }}>Video could not be loaded.</div>
-                    {errMsg && <div style={{ color: "#666", fontSize: "0.72rem", textAlign: "center" }}>{errMsg}</div>}
-                    {displayURL && (
-                      <a href={displayURL} target="_blank" rel="noopener noreferrer"
-                        style={{ color: "#c8a96e", fontSize: "0.82rem", textDecoration: "underline", marginTop: 4 }}>
-                        Open in new tab ↗
-                      </a>
-                    )}
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-        )}
+          {/* Error state */}
+          {errored && (
+            <div style={{
+              position: "absolute", inset: 0, display: "flex", flexDirection: "column",
+              alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.85)", gap: 10, padding: "0 28px",
+            }}>
+              {errMsg === "ios-webm" ? (
+                <>
+                  <div style={{ fontSize: "2rem" }}>📱</div>
+                  <div style={{ color: "#f0ece4", fontSize: "0.92rem", textAlign: "center", fontWeight: 600 }}>
+                    Desktop recording — Safari not supported
+                  </div>
+                  <div style={{ color: "#888", fontSize: "0.8rem", textAlign: "center", lineHeight: 1.5 }}>
+                    This video was recorded on desktop (WebM format). Safari on iOS can't play WebM. Open on a desktop browser or use the link below.
+                  </div>
+                  {displayURL && (
+                    <a href={displayURL} target="_blank" rel="noopener noreferrer"
+                      style={{ color: "#c8a96e", fontSize: "0.85rem", textDecoration: "underline", marginTop: 4 }}>
+                      Open in new tab ↗
+                    </a>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div style={{ fontSize: "2rem" }}>⚠️</div>
+                  <div style={{ color: "#e07a7a", fontSize: "0.88rem", textAlign: "center" }}>Video could not be loaded.</div>
+                  {errMsg && <div style={{ color: "#666", fontSize: "0.72rem", textAlign: "center" }}>{errMsg}</div>}
+                  {displayURL && (
+                    <a href={displayURL} target="_blank" rel="noopener noreferrer"
+                      style={{ color: "#c8a96e", fontSize: "0.82rem", textDecoration: "underline", marginTop: 4 }}>
+                      Open in new tab ↗
+                    </a>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </div>
 
         {activeIdx !== null && prompts[Number(activeIdx)] && (
           <div style={{ marginTop: 14, color: "#888", fontSize: "0.85rem", lineHeight: 1.5 }}>
