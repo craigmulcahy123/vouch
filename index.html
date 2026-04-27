@@ -2637,18 +2637,40 @@ function VideoEditor({ testimonial, onClose }) {
 
 // ── Video Playback Modal ──────────────────────────────────────────────────────
 function VideoPlaybackModal({ testimonial, onClose }) {
-  // Prefer processedVideoURLs (merged MP4s from FFmpeg); fall back to raw per-question clips
-  const processed    = testimonial.processedVideoURLs || {};
-  const FORMAT_ORDER = ["landscape", "portrait", "square"];
-  const hasProcessed = FORMAT_ORDER.some(k => processed[k]?.url);
+  const processed = testimonial.processedVideoURLs || {};
 
-  const rawURLs = hasProcessed
-    ? Object.fromEntries(FORMAT_ORDER.filter(k => processed[k]?.url).map(k => [k, processed[k].url]))
-    : (testimonial.videoURLs || {});
+  // Build a unified URL map and ordered key list for the tab strip.
+  // Priority: AI highlight → full raw Q MP4s → legacy format tabs → raw WebM fallback.
+  const rawURLs = {};
+  const keys    = [];
 
-  const keys    = hasProcessed
-    ? FORMAT_ORDER.filter(k => rawURLs[k])
-    : Object.keys(rawURLs).sort((a, b) => Number(a) - Number(b));
+  // AI highlight tab (use landscape; portrait/square are alternate downloads)
+  const highlightURL = processed.landscape?.url || processed.portrait?.url || processed.square?.url;
+  if (highlightURL) {
+    rawURLs["highlight"] = highlightURL;
+    keys.push("highlight");
+  }
+
+  // Full raw Q MP4s produced by the Cloud Function
+  ["q0","q1","q2","q3"].forEach(k => {
+    if (processed[k]?.url) { rawURLs[k] = processed[k].url; keys.push(k); }
+  });
+
+  // Legacy: format tabs without separate Q files
+  if (keys.length === 0) {
+    ["landscape","portrait","square"].forEach(k => {
+      if (processed[k]?.url) { rawURLs[k] = processed[k].url; keys.push(k); }
+    });
+  }
+
+  // Last resort: original WebM files
+  if (keys.length === 0) {
+    const webmURLs = testimonial.videoURLs || {};
+    Object.keys(webmURLs).sort((a, b) => Number(a) - Number(b)).forEach(k => {
+      if (webmURLs[k]) { rawURLs[k] = webmURLs[k]; keys.push(k); }
+    });
+  }
+
   const prompts = testimonial.prompts || [];
 
   const [activeIdx, setActiveIdx] = useState(keys[0] ?? null);
@@ -2825,20 +2847,24 @@ function VideoPlaybackModal({ testimonial, onClose }) {
 
         {keys.length > 1 && (
           <div className="video-clip-tabs">
-            {keys.map(idx => (
-              <button key={idx} className={`video-clip-tab ${activeIdx === idx ? "active" : ""}`}
-                onClick={() => handleTabClick(idx)}>
-                {hasProcessed
-                  ? (idx === "landscape" ? "16:9" : idx === "portrait" ? "9:16" : "1:1")
-                  : `Q${Number(idx) + 1}`
-                }
-                {!hasProcessed && prompts[Number(idx)] && (
-                  <span style={{ display: "block", fontSize: "0.72rem", opacity: 0.7, maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {prompts[Number(idx)]}
-                  </span>
-                )}
-              </button>
-            ))}
+            {keys.map(idx => {
+              const label = idx === "highlight" ? "⚡ AI Highlight"
+                : idx === "q0" ? "Q1" : idx === "q1" ? "Q2" : idx === "q2" ? "Q3" : idx === "q3" ? "Q4"
+                : idx === "landscape" ? "16:9" : idx === "portrait" ? "9:16" : idx === "square" ? "1:1"
+                : `Q${Number(idx) + 1}`;
+              const qPromptIdx = /^q(\d)$/.test(idx) ? Number(idx[1]) : null;
+              return (
+                <button key={idx} className={`video-clip-tab ${activeIdx === idx ? "active" : ""}`}
+                  onClick={() => handleTabClick(idx)}>
+                  {label}
+                  {qPromptIdx !== null && prompts[qPromptIdx] && (
+                    <span style={{ display: "block", fontSize: "0.72rem", opacity: 0.7, maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {prompts[qPromptIdx]}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
         )}
 
@@ -2923,9 +2949,15 @@ function VideoPlaybackModal({ testimonial, onClose }) {
           )}
         </div>
 
-        {activeIdx !== null && prompts[Number(activeIdx)] && (
+        {activeIdx === "highlight" && testimonial.clipReason && (
+          <div style={{ marginTop: 10, padding: "10px 14px", background: "#111", borderRadius: 8, border: "1px solid #222", fontSize: "0.82rem", color: "#888", lineHeight: 1.5 }}>
+            <span style={{ color: "#c8a96e", fontWeight: 600 }}>⚡ AI selected this moment because: </span>
+            {testimonial.clipReason}
+          </div>
+        )}
+        {activeIdx !== null && /^q(\d)$/.test(activeIdx) && prompts[Number(activeIdx[1])] && (
           <div style={{ marginTop: 14, color: "#888", fontSize: "0.85rem", lineHeight: 1.5 }}>
-            <span style={{ color: "var(--gold)", fontWeight: 600 }}>Q: </span>{prompts[Number(activeIdx)]}
+            <span style={{ color: "var(--gold)", fontWeight: 600 }}>Q: </span>{prompts[Number(activeIdx[1])]}
           </div>
         )}
       </div>
