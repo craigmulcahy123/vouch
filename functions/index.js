@@ -112,8 +112,10 @@ exports.processTestimonial = onDocumentCreated(
       for (const [qIdx, url] of videoEntries) {
         const localPath = path.join(tmpDir, `${testimonialId}_q${qIdx}_src.webm`);
         await downloadFile(url, localPath);
+        const dlSize = fs.existsSync(localPath) ? fs.statSync(localPath).size : 0;
         localVideos[qIdx] = localPath;
-        console.log(`[processTestimonial] downloaded Q${qIdx} → ${localPath}`);
+        console.log(`[processTestimonial] downloaded Q${qIdx} → ${localPath} (${(dlSize / 1024).toFixed(0)} KB)`);
+        if (dlSize < 1024) console.warn(`[processTestimonial] ⚠ Q${qIdx} source file suspiciously small: ${dlSize} bytes`);
       }
 
       // ── 6. Extract audio and transcribe with Claude ──────────────────────
@@ -250,9 +252,15 @@ Pick the single most compelling 15–35 second excerpt. Respond with JSON only, 
           duration,
           width: fmt.width,
           height: fmt.height,
-          captionText,
-          clientName,
         });
+
+        // Verify output before upload
+        const uploadSize = fs.existsSync(outputPath) ? fs.statSync(outputPath).size : 0;
+        console.log(`[processTestimonial] pre-upload size check — ${fmt.name}: ${(uploadSize / 1024).toFixed(0)} KB`);
+        if (uploadSize < 1024 * 1024) {
+          console.warn(`[processTestimonial] ⚠ ${fmt.name} output is < 1 MB — skipping upload of likely-corrupt file`);
+          continue;
+        }
 
         // Upload — public so download URLs never expire
         const storagePath = `users/${userId}/processed/${testimonialId}/${fmt.name}.mp4`;
@@ -342,74 +350,66 @@ function safeForDrawtext(str, maxLen) {
 }
 
 /**
- * Render one output format using FFmpeg:
- *   - Trim to clip window
- *   - Scale + pad to exact target dimensions (letterbox / pillarbox)
- *   - Overlay a branded caption bar at the bottom
- *   - Add a subtle Vouch watermark top-right
+ * Render one output format using FFmpeg.
+ *
+ * Key design decisions:
+ *   - Output-side -ss (not input-side seekInput): browser-recorded WebM files
+ *     have no seek index, so input-side -ss can't find a keyframe and produces
+ *     near-empty output (the 0.574-second / 100 KB corruption symptom).
+ *     Output-side -ss decodes from the start and discards frames up to startSec,
+ *     which is slower but reliable with any container format.
+ *   - Simplified filter chain (scale+pad only): drawtext/drawbox are removed
+ *     to eliminate font-not-found failures on Cloud Functions and reduce
+ *     encoding complexity while diagnosing.
+ *   - Full stderr capture so Cloud Function logs show exactly what FFmpeg did.
  */
-function processVideoFormat({ inputPath, outputPath, startSec, duration, width, height, captionText, clientName }) {
+function processVideoFormat({ inputPath, outputPath, startSec, duration, width, height }) {
   return new Promise((resolve, reject) => {
-    // Break long caption into two lines at a word boundary
-    let line1 = captionText;
-    let line2 = "";
-    if (captionText.length > 38) {
-      const mid = captionText.lastIndexOf(" ", 38);
-      const split = mid > 10 ? mid : 38;
-      line1 = captionText.substring(0, split).trim();
-      line2 = captionText.substring(split).trim().substring(0, 38);
-    }
+    const stderrLines = [];
 
-    const barH   = clientName ? 150 : 110;
-    const barY   = height - barH;
-    const nameY  = height - barH + 18;
-    const line1Y = height - barH + (clientName ? 56 : 18);
-    const line2Y = line1Y + 30;
+    const srcSize = fs.existsSync(inputPath) ? fs.statSync(inputPath).size : 0;
+    console.log(`[FFmpeg] encode start — ${path.basename(outputPath)} | ${width}x${height} | startSec:${startSec} duration:${duration}s | src:${(srcSize / 1024).toFixed(0)} KB`);
 
     const vf = [
-      // Fit inside target box, then pad with black to exact size
       `scale=${width}:${height}:force_original_aspect_ratio=decrease`,
       `pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black`,
-      // Semi-transparent caption bar
-      `drawbox=x=0:y=${barY}:w=${width}:h=${barH}:color=black@0.72:t=fill`,
-      // Client name (bold — draw twice offset for fake-bold effect)
-      ...(clientName ? [
-        `drawtext=text='${clientName}':x=(w-tw)/2+1:y=${nameY + 1}:fontsize=30:fontcolor=black@0.4`,
-        `drawtext=text='${clientName}':x=(w-tw)/2:y=${nameY}:fontsize=30:fontcolor=#ffffff`,
-      ] : []),
-      // Caption line 1
-      `drawtext=text='${line1}':x=(w-tw)/2:y=${line1Y}:fontsize=22:fontcolor=#e0dbd0`,
-      // Caption line 2 (only if content)
-      ...(line2 ? [`drawtext=text='${line2}':x=(w-tw)/2:y=${line2Y}:fontsize=22:fontcolor=#e0dbd0`] : []),
-      // Vouch watermark top-right
-      `drawtext=text='Vouch':x=w-100:y=22:fontsize=24:fontcolor=white@0.45`,
     ].join(",");
 
+    const outputOpts = [
+      `-t ${duration}`,
+      `-crf 23`,
+      `-preset fast`,
+      `-movflags +faststart`,
+    ];
+    // Output-side seek: decode from 0, discard frames before startSec.
+    // Must come before -t so -t counts from the seek point, not from 0.
+    if (startSec > 0) outputOpts.unshift(`-ss ${startSec}`);
+
     ffmpeg(inputPath)
-      .seekInput(startSec)
-      .duration(duration)
       .videoFilter(vf)
       .videoCodec("libx264")
       .audioCodec("aac")
-      .outputOptions(["-crf 23", "-preset fast", "-movflags +faststart"])
-      .on("end", resolve)
-      .on("error", (err) => {
-        // Retry without text overlays if drawtext fails (e.g. font not found)
-        console.warn("[processVideoFormat] drawtext error, retrying without captions:", err.message);
-        const plainVf = [
-          `scale=${width}:${height}:force_original_aspect_ratio=decrease`,
-          `pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black`,
-        ].join(",");
-        ffmpeg(inputPath)
-          .seekInput(startSec)
-          .duration(duration)
-          .videoFilter(plainVf)
-          .videoCodec("libx264")
-          .audioCodec("aac")
-          .outputOptions(["-crf 23", "-preset fast", "-movflags +faststart"])
-          .on("end", resolve)
-          .on("error", reject)
-          .save(outputPath);
+      .outputOptions(outputOpts)
+      .on("stderr", line => {
+        stderrLines.push(line);
+        // Surface frame-progress and error lines without flooding logs
+        if (/frame=|fps=|error|Error|invalid|Invalid/i.test(line)) {
+          console.log("[FFmpeg stderr]", line);
+        }
+      })
+      .on("end", () => {
+        const outSize = fs.existsSync(outputPath) ? fs.statSync(outputPath).size : 0;
+        const outKB = (outSize / 1024).toFixed(0);
+        console.log(`[FFmpeg] ✅ done — ${path.basename(outputPath)} — ${outKB} KB`);
+        if (outSize < 1024 * 1024) {
+          console.warn(`[FFmpeg] ⚠ output < 1 MB (${outKB} KB) — full FFmpeg stderr:\n${stderrLines.join("\n")}`);
+        }
+        resolve();
+      })
+      .on("error", err => {
+        console.error(`[FFmpeg] ❌ failed — ${err.message}`);
+        console.error(`[FFmpeg] full stderr:\n${stderrLines.join("\n")}`);
+        reject(err);
       })
       .save(outputPath);
   });
