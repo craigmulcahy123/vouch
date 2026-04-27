@@ -172,6 +172,25 @@ exports.processTestimonial = onDocumentCreated(
         .map(([i, t]) => `Question ${Number(i) + 1}: ${t}`)
         .join("\n\n");
 
+      // ── 7a. Generate testimonial quote from transcript ───────────────────
+      let generatedQuote = data.quote && data.quote !== "Processing transcript..." ? data.quote : "";
+      if (fullTranscript.trim()) {
+        try {
+          const quoteResponse = await anthropic.messages.create({
+            model: "claude-opus-4-6",
+            max_tokens: 200,
+            messages: [{
+              role: "user",
+              content: `Here is a transcript from a video testimonial. Extract the most compelling quote or create a short polished testimonial from what they said. Return just the quote, 1-3 sentences, in first person, no quotation marks needed.\n\n${fullTranscript}`,
+            }],
+          });
+          generatedQuote = quoteResponse.content[0]?.text?.trim() || generatedQuote;
+          console.log(`[processTestimonial] generated quote: "${generatedQuote.substring(0, 100)}..."`);
+        } catch (e) {
+          console.warn("[processTestimonial] quote generation failed:", e.message);
+        }
+      }
+
       let clipSpec = null;
       if (fullTranscript.trim()) {
         try {
@@ -262,6 +281,7 @@ Pick the single most compelling 15–35 second excerpt. Respond with JSON only, 
         processedVideoURLs,
         transcripts,
         selectedClip: clipSpec,
+        ...(generatedQuote ? { quote: generatedQuote } : {}),
       });
       console.log("[processTestimonial] Firestore updated — status: processed");
 

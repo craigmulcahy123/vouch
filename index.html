@@ -1810,7 +1810,13 @@ function ClientPage({ campaign, onBack, storage, userId, db }) {
       } catch (e) { console.error("[vouch] video upload failed:", e); }
     }
     setSubmitPhase("analyzing");
-    const quote = await analyzeTestimonial(answers, prompts);
+    const hasTypedAnswers = Object.values(answers).some(v => typeof v === "string" && v.trim().length > 0);
+    let quote;
+    if (hasVideos && !hasTypedAnswers) {
+      quote = "Processing transcript...";
+    } else {
+      quote = await analyzeTestimonial(answers, prompts);
+    }
     setGeneratedQuote(quote);
     if (db && ownerId) {
       const tid = Date.now().toString();
@@ -3272,6 +3278,43 @@ function ProfileSettings({ db, userId, storage }) {
   );
 }
 
+// ── QuoteProcessingIndicator ──────────────────────────────────────────────────
+// Shows a spinner while the Cloud Function generates the quote from the video
+// transcript, then displays the finished quote once Firestore is updated.
+function QuoteProcessingIndicator({ testimonialId, userId, db }) {
+  const [resolvedQuote, setResolvedQuote] = useState(null);
+
+  useEffect(() => {
+    if (!db || !userId || !testimonialId) return;
+
+    function check() {
+      db.collection("users").doc(userId).collection("testimonials").doc(testimonialId).get()
+        .then(snap => {
+          if (!snap.exists) return;
+          const q = snap.data().quote;
+          if (q && q !== "Processing transcript...") setResolvedQuote(q);
+        })
+        .catch(() => {});
+    }
+
+    const timer = setInterval(check, 10000);
+    return () => clearInterval(timer);
+  }, [db, userId, testimonialId]);
+
+  if (resolvedQuote) {
+    return React.createElement("div", { className: "t-quote" }, `"${resolvedQuote}"`);
+  }
+
+  return React.createElement("div", {
+    style: { marginTop: 6, fontSize: "0.85rem", color: "#888", display: "flex", alignItems: "center", gap: 6 }
+  },
+    React.createElement("span", {
+      style: { display: "inline-block", width: 10, height: 10, borderRadius: "50%", border: "2px solid #c8a96e", borderTopColor: "transparent", animation: "spin 0.8s linear infinite", flexShrink: 0 }
+    }),
+    "Generating quote from transcript…"
+  );
+}
+
 // ── Dashboard ──────────────────────────────────────────────────────────────
 function Dashboard({ onPreview, userId, userEmail, db, storage, onUpgrade }) {
   const [innerTab, setInnerTab] = useState("campaigns");
@@ -3773,7 +3816,11 @@ function Dashboard({ onPreview, userId, userEmail, db, storage, onUpgrade }) {
                     </div>
                     <div className="t-company">{t.clientCompany} · {t.campaignName}</div>
                     <div className="t-stars">{"★".repeat(t.rating)}{"☆".repeat(5 - t.rating)}</div>
-                    <div className="t-quote">"{t.quote}"</div>
+                    {t.quote === "Processing transcript..." ? (
+                      <QuoteProcessingIndicator key={t.id} testimonialId={t.id} userId={userId} db={db} />
+                    ) : (
+                      <div className="t-quote">"{t.quote}"</div>
+                    )}
                     {t.status === "processing" && (
                       <div style={{ marginTop: 8, fontSize: "0.8rem", color: "#7eb8f7", display: "flex", alignItems: "center", gap: 6 }}>
                         <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: "50%", border: "2px solid #7eb8f7", borderTopColor: "transparent", animation: "spin 0.8s linear infinite" }} />
