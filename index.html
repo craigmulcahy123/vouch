@@ -2669,8 +2669,48 @@ function VideoPlaybackModal({ testimonial, onClose }) {
   useEffect(() => {
     if (initRef.current) return;
     initRef.current = true;
-    console.log("[vouch/watch] opening —", testimonial.clientName, "| keys:", keys, "| rawURLs:", rawURLs);
+    console.log("[vouch/watch] modal opened —", {
+      client: testimonial.clientName,
+      hasProcessed,
+      keys,
+      rawURLs,
+      processedVideoURLs: processed,
+      videoURLs: testimonial.videoURLs,
+    });
     if (keys[0] != null) playClip(keys[0]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Attach diagnostic event listeners to the video element for the lifetime of the modal.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const ts = () => new Date().toISOString();
+    const onPlay    = () => console.log(`[vouch/watch] ▶ play     @ ${ts()} | currentTime: ${video.currentTime.toFixed(3)} | src: ${video.src?.slice(0, 80)}`);
+    const onPause   = () => console.log(`[vouch/watch] ⏸ pause    @ ${ts()} | currentTime: ${video.currentTime.toFixed(3)}`);
+    const onEnded   = () => console.log(`[vouch/watch] ⏹ ended    @ ${ts()} | currentTime: ${video.currentTime.toFixed(3)}`);
+    const onError   = () => console.log(`[vouch/watch] ❌ error    @ ${ts()} | code: ${video.error?.code} | message: ${video.error?.message} | networkState: ${video.networkState} | readyState: ${video.readyState} | error obj:`, video.error);
+    const onStalled = () => console.log(`[vouch/watch] ⚠ stalled  @ ${ts()} | currentTime: ${video.currentTime.toFixed(3)} | networkState: ${video.networkState}`);
+    const onWaiting = () => console.log(`[vouch/watch] ⏳ waiting  @ ${ts()} | currentTime: ${video.currentTime.toFixed(3)} | readyState: ${video.readyState}`);
+    const onEmptied = () => console.log(`[vouch/watch] 🗑 emptied  @ ${ts()} | currentTime: ${video.currentTime.toFixed(3)}`);
+    const onSuspend = () => console.log(`[vouch/watch] 💤 suspend  @ ${ts()} | currentTime: ${video.currentTime.toFixed(3)} | networkState: ${video.networkState}`);
+    video.addEventListener("play",    onPlay);
+    video.addEventListener("pause",   onPause);
+    video.addEventListener("ended",   onEnded);
+    video.addEventListener("error",   onError);
+    video.addEventListener("stalled", onStalled);
+    video.addEventListener("waiting", onWaiting);
+    video.addEventListener("emptied", onEmptied);
+    video.addEventListener("suspend", onSuspend);
+    return () => {
+      video.removeEventListener("play",    onPlay);
+      video.removeEventListener("pause",   onPause);
+      video.removeEventListener("ended",   onEnded);
+      video.removeEventListener("error",   onError);
+      video.removeEventListener("stalled", onStalled);
+      video.removeEventListener("waiting", onWaiting);
+      video.removeEventListener("emptied", onEmptied);
+      video.removeEventListener("suspend", onSuspend);
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // All video loading is imperative — no effect reacting to activeIdx changes.
@@ -2703,9 +2743,10 @@ function VideoPlaybackModal({ testimonial, onClose }) {
     // Refresh the download URL so expired Firebase tokens are never a problem.
     let url = storedURL;
     try {
+      console.log("[vouch/watch] calling getDownloadURL for key:", idx, "| storedURL:", storedURL.slice(0, 80) + "…");
       const ref = firebase.storage().refFromURL(storedURL);
       url = await ref.getDownloadURL();
-      console.log("[vouch/watch] refreshed URL for", idx, "→", url.slice(0, 80) + "…");
+      console.log("[vouch/watch] getDownloadURL returned for key:", idx, "→", url.slice(0, 80) + "…");
     } catch (e) {
       console.warn("[vouch/watch] URL refresh failed, using stored URL:", e.message);
     }
@@ -2732,8 +2773,11 @@ function VideoPlaybackModal({ testimonial, onClose }) {
     // Set src and load synchronously, then call play().
     // The browser buffers internally; play() queues the request and starts
     // as soon as enough data is ready. No canplay listener needed.
+    console.log("[vouch/watch] setting video.src →", url.slice(0, 80) + "…");
     video.src = url;
+    console.log("[vouch/watch] calling video.load()");
     video.load();
+    console.log("[vouch/watch] calling video.play()");
     video.play().catch(err => {
       console.warn("[vouch/watch] play() blocked:", err.name, "—", err.message);
       setTapToPlay(true);
@@ -2750,6 +2794,8 @@ function VideoPlaybackModal({ testimonial, onClose }) {
     const code  = video?.error?.code;
     const msg   = video?.error?.message || "Unknown media error";
     console.error("[vouch/watch] ❌ MediaError", code, ":", msg, "| src:", video?.src?.slice(0, 80));
+    console.error("[vouch/watch] video.error object:", video?.error);
+    console.error("[vouch/watch] video state — networkState:", video?.networkState, "| readyState:", video?.readyState, "| currentSrc:", video?.currentSrc?.slice(0, 80));
     setErrored(true);
     setErrMsg(`MediaError ${code}: ${msg}`);
     setTapToPlay(false);
