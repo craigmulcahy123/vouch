@@ -3936,12 +3936,12 @@ function Dashboard({ onPreview, userId, userEmail, db, storage, onUpgrade }) {
                             if (isPending) return;
                             setReprocessingIds(prev => new Set([...prev, t.id]));
                             await db.collection("users").doc(userId).collection("testimonials")
-                              .doc(t.id).update({ status: "new" }).catch(console.error);
+                              .doc(t.id).update({ status: "new", processedVideoURLs: {} }).catch(console.error);
                           }}>
                           {isDone ? "Done ✓" : isPending ? (
                             <>
                               <span style={{ width: 10, height: 10, borderRadius: "50%", border: "2px solid #7eb8f7", borderTopColor: "transparent", animation: "spin 0.8s linear infinite", display: "inline-block", flexShrink: 0 }} />
-                              Processing…
+                              Reprocessing…
                             </>
                           ) : "↺ Reprocess"}
                         </button>

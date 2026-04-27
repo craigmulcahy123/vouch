@@ -1,6 +1,6 @@
 "use strict";
 
-const { onDocumentCreated } = require("firebase-functions/v2/firestore");
+const { onDocumentWritten } = require("firebase-functions/v2/firestore");
 const admin  = require("firebase-admin");
 const ffmpeg = require("fluent-ffmpeg");
 const ffmpegPath = require("@ffmpeg-installer/ffmpeg").path;
@@ -31,7 +31,7 @@ function getResend() {
 // Fires whenever a new testimonial document is written to Firestore.
 // Steps: processing → download videos → transcribe with Claude →
 //        select best clip → render 3 formats → upload → notify via email.
-exports.processTestimonial = onDocumentCreated(
+exports.processTestimonial = onDocumentWritten(
   {
     document: "users/{userId}/testimonials/{testimonialId}",
     timeoutSeconds: 540,
@@ -41,10 +41,18 @@ exports.processTestimonial = onDocumentCreated(
   },
   async (event) => {
     const { userId, testimonialId } = event.params;
-    const snap = event.data;
-    if (!snap) return;
+    const snap = event.data?.after;
+    if (!snap?.exists) return; // document was deleted
 
     const data = snap.data();
+    const before = event.data?.before;
+    const isCreate = !before?.exists;
+    const statusBefore = before?.exists ? before.data()?.status : null;
+
+    // Run on initial creation, or when the dashboard resets status to "new"
+    // to request reprocessing. Ignore all other updates (status transitions
+    // written by this function itself) to avoid infinite loops.
+    if (!isCreate && !(data.status === "new" && statusBefore !== "new")) return;
     const testimonialRef = db
       .collection("users").doc(userId)
       .collection("testimonials").doc(testimonialId);
