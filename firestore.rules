@@ -25,5 +25,12 @@ service cloud.firestore {
     match /users/{userId}/invites/{inviteId} {
       allow update: if request.auth != null;
     }
+
+    // ── Partner applications — anyone can submit, no client-side reads ────────
+    // Reads are handled server-side via Admin SDK only.
+    match /partners/{partnerId} {
+      allow create: if true;
+      allow read, update, delete: if false;
+    }
   }
 }

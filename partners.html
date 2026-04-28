@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vouch Partner Program — Earn 20–35% Recurring Commission</title>
+  <meta name="description" content="Join the Vouch Partner Program and earn recurring commissions for every business you refer. Bronze to Platinum tiers with up to 35% commission." />
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230e0e0e'/><text y='.9em' font-size='70' x='50%' text-anchor='middle' dominant-baseline='middle' dy='0.1em' fill='%23c8a96e' font-family='serif' font-weight='bold'>V</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --gold: #c8a96e;
+      --gold-light: #e8d5a3;
+      --gold-dark: #a8893e;
+      --ink: #0e0e0e;
+      --paper: #f5f0e8;
+      --cream: #faf7f2;
+      --border: #e8e2d8;
+      --muted: #7a7060;
+    }
+
+    html { scroll-behavior: smooth; }
+    body { font-family: 'DM Sans', sans-serif; background: var(--ink); color: #fff; line-height: 1.6; }
+
+    /* ── Nav ── */
+    nav {
+      position: sticky; top: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 32px; height: 64px;
+      background: rgba(14,14,14,0.92); backdrop-filter: blur(12px);
+      border-bottom: 1px solid #1e1e1e;
+    }
+    .nav-logo {
+      font-family: 'Instrument Serif', serif; font-size: 1.3rem; font-style: italic;
+      color: var(--gold); text-decoration: none; letter-spacing: 0.02em;
+    }
+    .nav-links { display: flex; align-items: center; gap: 28px; }
+    .nav-links a { color: #aaa; text-decoration: none; font-size: 0.88rem; font-weight: 500; transition: color 0.15s; }
+    .nav-links a:hover { color: #fff; }
+    .nav-cta {
+      background: var(--gold); color: var(--ink); border: none;
+      padding: 9px 20px; border-radius: 8px; font-family: 'DM Sans', sans-serif;
+      font-weight: 700; font-size: 0.88rem; cursor: pointer; transition: opacity 0.15s;
+    }
+    .nav-cta:hover { opacity: 0.88; }
+
+    /* ── Hero ── */
+    .hero {
+      text-align: center; padding: 100px 24px 80px;
+      background: radial-gradient(ellipse 80% 50% at 50% -10%, rgba(200,169,110,0.18) 0%, transparent 70%);
+      position: relative; overflow: hidden;
+    }
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 7px;
+      background: rgba(200,169,110,0.12); border: 1px solid rgba(200,169,110,0.3);
+      border-radius: 99px; padding: 5px 14px;
+      font-size: 0.78rem; font-weight: 600; color: var(--gold);
+      text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 28px;
+    }
+    .hero-badge span { width: 6px; height: 6px; border-radius: 50%; background: var(--gold); display: inline-block; }
+    .hero h1 {
+      font-family: 'Instrument Serif', serif; font-size: clamp(2.6rem, 6vw, 4.2rem);
+      line-height: 1.1; max-width: 800px; margin: 0 auto 20px; font-weight: 400;
+    }
+    .hero h1 em { color: var(--gold); font-style: italic; }
+    .hero-sub {
+      color: #888; font-size: clamp(1rem, 2vw, 1.15rem); max-width: 540px;
+      margin: 0 auto 40px; line-height: 1.7;
+    }
+    .hero-ctas { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    .btn-gold {
+      background: var(--gold); color: var(--ink); border: none;
+      padding: 14px 28px; border-radius: 10px; font-family: 'DM Sans', sans-serif;
+      font-weight: 700; font-size: 1rem; cursor: pointer; transition: opacity 0.15s;
+    }
+    .btn-gold:hover { opacity: 0.88; }
+    .btn-outline {
+      background: transparent; color: #aaa; border: 1px solid #333;
+      padding: 14px 28px; border-radius: 10px; font-family: 'DM Sans', sans-serif;
+      font-weight: 600; font-size: 1rem; cursor: pointer; transition: all 0.15s;
+      text-decoration: none; display: inline-block;
+    }
+    .btn-outline:hover { border-color: #666; color: #fff; }
+
+    /* ── Stats bar ── */
+    .stats-bar {
+      display: flex; justify-content: center; gap: 0;
+      border-top: 1px solid #1e1e1e; border-bottom: 1px solid #1e1e1e;
+      background: #111;
+    }
+    .stat-item {
+      flex: 1; max-width: 220px; text-align: center; padding: 28px 16px;
+      border-right: 1px solid #1e1e1e;
+    }
+    .stat-item:last-child { border-right: none; }
+    .stat-num {
+      font-family: 'Instrument Serif', serif; font-size: 2.2rem; color: var(--gold);
+      line-height: 1; margin-bottom: 6px;
+    }
+    .stat-label { font-size: 0.82rem; color: #666; font-weight: 500; }
+
+    /* ── Section ── */
+    section { padding: 80px 24px; }
+    .section-inner { max-width: 960px; margin: 0 auto; }
+    .section-tag {
+      font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em;
+      color: var(--gold); margin-bottom: 12px;
+    }
+    .section-title {
+      font-family: 'Instrument Serif', serif; font-size: clamp(1.8rem, 4vw, 2.6rem);
+      font-weight: 400; line-height: 1.2; margin-bottom: 16px;
+    }
+    .section-sub { color: #888; font-size: 1rem; max-width: 540px; line-height: 1.7; }
+
+    /* ── How it works ── */
+    .hiw-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 32px; margin-top: 52px; }
+    @media (max-width: 680px) { .hiw-grid { grid-template-columns: 1fr; gap: 24px; } }
+    .hiw-card {
+      background: #111; border: 1px solid #1e1e1e; border-radius: 16px;
+      padding: 32px 28px; position: relative;
+    }
+    .hiw-num {
+      font-family: 'Instrument Serif', serif; font-size: 3.5rem; color: #1a1a1a;
+      position: absolute; top: 16px; right: 20px; line-height: 1; font-weight: 400;
+      user-select: none;
+    }
+    .hiw-icon { font-size: 2rem; margin-bottom: 16px; }
+    .hiw-card h3 { font-size: 1.05rem; font-weight: 700; margin-bottom: 10px; }
+    .hiw-card p { color: #888; font-size: 0.88rem; line-height: 1.6; }
+
+    /* ── Tier table ── */
+    .tier-section { background: #0a0a0a; }
+    .tier-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 52px; }
+    @media (max-width: 800px) { .tier-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 480px) { .tier-grid { grid-template-columns: 1fr; } }
+    .tier-card {
+      background: #111; border: 1px solid #1e1e1e; border-radius: 16px;
+      padding: 28px 24px; text-align: center; position: relative; overflow: hidden;
+      transition: border-color 0.2s, transform 0.2s;
+    }
+    .tier-card:hover { border-color: rgba(200,169,110,0.4); transform: translateY(-2px); }
+    .tier-card.featured { border-color: var(--gold); }
+    .tier-card.featured::before {
+      content: 'Most Popular'; position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+      background: var(--gold); color: var(--ink); font-size: 0.65rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.1em; padding: 3px 14px;
+      border-radius: 0 0 8px 8px;
+    }
+    .tier-medal { font-size: 2.2rem; margin-bottom: 10px; }
+    .tier-name { font-size: 1rem; font-weight: 700; margin-bottom: 4px; }
+    .tier-threshold { font-size: 0.78rem; color: #666; margin-bottom: 16px; }
+    .tier-rate {
+      font-family: 'Instrument Serif', serif; font-size: 2.8rem; color: var(--gold);
+      line-height: 1; margin-bottom: 4px;
+    }
+    .tier-rate-label { font-size: 0.78rem; color: #888; margin-bottom: 20px; }
+    .tier-perks { list-style: none; text-align: left; }
+    .tier-perks li {
+      font-size: 0.82rem; color: #aaa; padding: 5px 0;
+      border-bottom: 1px solid #1e1e1e; display: flex; align-items: center; gap: 8px;
+    }
+    .tier-perks li:last-child { border-bottom: none; }
+    .tier-perks li::before { content: '✓'; color: var(--gold); font-weight: 700; flex-shrink: 0; }
+
+    /* ── Calculator ── */
+    .calc-section { background: #111; border-top: 1px solid #1e1e1e; border-bottom: 1px solid #1e1e1e; }
+    .calc-card {
+      background: #0a0a0a; border: 1px solid #1e1e1e; border-radius: 20px;
+      padding: 44px; margin-top: 48px;
+      display: grid; grid-template-columns: 1fr 1fr; gap: 48px; align-items: center;
+    }
+    @media (max-width: 700px) { .calc-card { grid-template-columns: 1fr; gap: 32px; } }
+    .calc-label { font-size: 0.78rem; font-weight: 600; color: #888; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.06em; }
+    .calc-slider {
+      width: 100%; -webkit-appearance: none; appearance: none;
+      height: 6px; background: #222; border-radius: 99px; outline: none;
+      margin-bottom: 6px;
+    }
+    .calc-slider::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%;
+      background: var(--gold); cursor: pointer; box-shadow: 0 0 0 4px rgba(200,169,110,0.2);
+    }
+    .calc-slider::-moz-range-thumb {
+      width: 20px; height: 20px; border-radius: 50%; background: var(--gold);
+      cursor: pointer; border: none; box-shadow: 0 0 0 4px rgba(200,169,110,0.2);
+    }
+    .calc-slider-labels { display: flex; justify-content: space-between; font-size: 0.75rem; color: #555; }
+    .calc-select {
+      width: 100%; background: #111; border: 1px solid #333; color: #fff;
+      padding: 10px 14px; border-radius: 8px; font-family: 'DM Sans', sans-serif;
+      font-size: 0.9rem; cursor: pointer; margin-top: 20px;
+    }
+    .calc-result { text-align: center; }
+    .calc-tier-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 6px 18px; border-radius: 99px; font-size: 0.82rem; font-weight: 700;
+      margin-bottom: 20px; border: 1px solid rgba(200,169,110,0.4);
+      background: rgba(200,169,110,0.08);
+    }
+    .calc-monthly {
+      font-family: 'Instrument Serif', serif; font-size: 3.4rem; color: var(--gold); line-height: 1;
+    }
+    .calc-monthly-label { font-size: 0.85rem; color: #888; margin: 4px 0 20px; }
+    .calc-yearly {
+      font-family: 'Instrument Serif', serif; font-size: 1.6rem; color: #aaa;
+    }
+    .calc-yearly-label { font-size: 0.8rem; color: #555; }
+    .calc-breakdown {
+      margin-top: 20px; padding-top: 20px; border-top: 1px solid #1e1e1e;
+      font-size: 0.82rem; color: #666; line-height: 2;
+    }
+
+    /* ── Why Vouch ── */
+    .why-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 52px; }
+    @media (max-width: 680px) { .why-grid { grid-template-columns: 1fr; } }
+    .why-card {
+      background: #111; border: 1px solid #1e1e1e; border-radius: 14px; padding: 28px 24px;
+    }
+    .why-icon { font-size: 1.8rem; margin-bottom: 14px; }
+    .why-card h3 { font-size: 0.98rem; font-weight: 700; margin-bottom: 8px; }
+    .why-card p { color: #888; font-size: 0.85rem; line-height: 1.6; }
+
+    /* ── Testimonials ── */
+    .testimonials-section { background: #0a0a0a; }
+    .testimonials-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 48px; }
+    @media (max-width: 720px) { .testimonials-grid { grid-template-columns: 1fr; } }
+    .quote-card {
+      background: #111; border: 1px solid #1e1e1e; border-radius: 16px; padding: 28px 24px;
+    }
+    .quote-stars { color: var(--gold); font-size: 0.9rem; margin-bottom: 14px; }
+    .quote-text {
+      font-family: 'Instrument Serif', serif; font-size: 1rem; font-style: italic;
+      color: #ccc; line-height: 1.6; margin-bottom: 20px;
+    }
+    .quote-author { font-size: 0.82rem; font-weight: 600; color: #fff; }
+    .quote-role { font-size: 0.78rem; color: #666; margin-top: 2px; }
+    .quote-tier {
+      display: inline-flex; align-items: center; gap: 5px;
+      background: rgba(200,169,110,0.1); border: 1px solid rgba(200,169,110,0.25);
+      border-radius: 99px; padding: 2px 10px; font-size: 0.72rem; font-weight: 700;
+      color: var(--gold); margin-top: 12px;
+    }
+
+    /* ── FAQ ── */
+    .faq-list { margin-top: 48px; max-width: 720px; }
+    .faq-item {
+      border-bottom: 1px solid #1e1e1e; overflow: hidden;
+    }
+    .faq-question {
+      width: 100%; background: none; border: none; cursor: pointer;
+      text-align: left; padding: 20px 0; color: #fff;
+      font-family: 'DM Sans', sans-serif; font-size: 0.98rem; font-weight: 600;
+      display: flex; justify-content: space-between; align-items: center; gap: 16px;
+    }
+    .faq-chevron {
+      flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%;
+      background: #1e1e1e; display: flex; align-items: center; justify-content: center;
+      transition: transform 0.25s, background 0.15s; font-size: 0.75rem;
+    }
+    .faq-item.open .faq-chevron { transform: rotate(180deg); background: rgba(200,169,110,0.15); }
+    .faq-answer {
+      max-height: 0; overflow: hidden; transition: max-height 0.3s ease, padding 0.3s ease;
+      padding: 0;
+    }
+    .faq-item.open .faq-answer { max-height: 300px; padding-bottom: 20px; }
+    .faq-answer p { color: #888; font-size: 0.88rem; line-height: 1.75; }
+
+    /* ── Final CTA ── */
+    .cta-section {
+      text-align: center; padding: 100px 24px;
+      background: radial-gradient(ellipse 70% 60% at 50% 100%, rgba(200,169,110,0.15) 0%, transparent 65%);
+      border-top: 1px solid #1e1e1e;
+    }
+    .cta-section h2 {
+      font-family: 'Instrument Serif', serif; font-size: clamp(2rem, 4vw, 3rem);
+      font-weight: 400; max-width: 700px; margin: 0 auto 16px; line-height: 1.2;
+    }
+    .cta-section h2 em { color: var(--gold); font-style: italic; }
+    .cta-section p { color: #888; max-width: 440px; margin: 0 auto 36px; line-height: 1.7; }
+
+    /* ── Footer ── */
+    footer {
+      border-top: 1px solid #1e1e1e; padding: 28px 24px;
+      text-align: center; font-size: 0.82rem; color: #555;
+    }
+    footer a { color: var(--gold); text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+
+    /* ── Modal ── */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0; z-index: 1000;
+      background: rgba(0,0,0,0.75); align-items: center; justify-content: center;
+      padding: 20px; backdrop-filter: blur(4px);
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: #111; border: 1px solid #2a2a2a; border-radius: 20px;
+      padding: 44px; max-width: 520px; width: 100%;
+      animation: slideUp 0.25s ease;
+    }
+    @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    .modal-title {
+      font-family: 'Instrument Serif', serif; font-size: 1.7rem; font-weight: 400;
+      margin-bottom: 6px;
+    }
+    .modal-sub { color: #888; font-size: 0.88rem; margin-bottom: 28px; line-height: 1.5; }
+    .form-group { margin-bottom: 16px; }
+    .form-group label {
+      display: block; font-size: 0.8rem; font-weight: 600; color: #888;
+      margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    .form-group input, .form-group textarea, .form-group select {
+      width: 100%; background: #0a0a0a; border: 1px solid #2a2a2a; color: #fff;
+      padding: 11px 14px; border-radius: 9px; font-family: 'DM Sans', sans-serif;
+      font-size: 0.9rem; transition: border-color 0.15s; outline: none;
+    }
+    .form-group input:focus, .form-group textarea:focus { border-color: var(--gold); }
+    .form-group textarea { resize: none; min-height: 90px; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .modal-actions { display: flex; gap: 10px; margin-top: 24px; }
+    .btn-submit {
+      flex: 1; background: var(--gold); color: var(--ink); border: none;
+      padding: 13px; border-radius: 9px; font-family: 'DM Sans', sans-serif;
+      font-weight: 700; font-size: 0.95rem; cursor: pointer; transition: opacity 0.15s;
+    }
+    .btn-submit:hover { opacity: 0.88; }
+    .btn-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-cancel {
+      background: transparent; color: #666; border: 1px solid #2a2a2a;
+      padding: 13px 20px; border-radius: 9px; font-family: 'DM Sans', sans-serif;
+      font-weight: 600; font-size: 0.95rem; cursor: pointer; transition: all 0.15s;
+    }
+    .btn-cancel:hover { border-color: #444; color: #aaa; }
+    .form-success {
+      display: none; text-align: center; padding: 20px 0;
+    }
+    .form-success .success-icon { font-size: 3rem; margin-bottom: 16px; }
+    .form-success h3 {
+      font-family: 'Instrument Serif', serif; font-size: 1.5rem; font-weight: 400;
+      margin-bottom: 10px;
+    }
+    .form-success p { color: #888; font-size: 0.88rem; line-height: 1.6; }
+    .form-error { color: #e05c5c; font-size: 0.83rem; margin-top: 8px; display: none; }
+
+    @media (max-width: 480px) {
+      .modal { padding: 28px 20px; border-radius: 16px; }
+      .form-row { grid-template-columns: 1fr; }
+      nav { padding: 0 16px; }
+      .nav-links { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ── Navigation ── -->
+  <nav>
+    <a href="/" class="nav-logo">✦ Vouch</a>
+    <div class="nav-links">
+      <a href="#how-it-works">How it works</a>
+      <a href="#tiers">Commission tiers</a>
+      <a href="#calculator">Calculator</a>
+      <a href="#faq">FAQ</a>
+    </div>
+    <button class="nav-cta" onclick="openModal()">Apply to Partner →</button>
+  </nav>
+
+  <!-- ── Hero ── -->
+  <section class="hero">
+    <div class="hero-badge"><span></span> Partner Program</div>
+    <h1>Earn <em>20–35%</em><br>recurring commission</h1>
+    <p class="hero-sub">Refer agencies, coaches, and growing businesses to Vouch and earn a lifetime commission on every account — as long as they stay subscribed.</p>
+    <div class="hero-ctas">
+      <button class="btn-gold" onclick="openModal()">Apply Now — It's Free</button>
+      <a href="#how-it-works" class="btn-outline">See how it works</a>
+    </div>
+  </section>
+
+  <!-- ── Stats bar ── -->
+  <div class="stats-bar">
+    <div class="stat-item">
+      <div class="stat-num">35%</div>
+      <div class="stat-label">Max commission rate</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num">Lifetime</div>
+      <div class="stat-label">Recurring commissions</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num">€149</div>
+      <div class="stat-label">Avg. customer value / month</div>
+    </div>
+    <div class="stat-item">
+      <div class="stat-num">2–3 days</div>
+      <div class="stat-label">Application review time</div>
+    </div>
+  </div>
+
+  <!-- ── How it works ── -->
+  <section id="how-it-works">
+    <div class="section-inner">
+      <div class="section-tag">How it works</div>
+      <div class="section-title">Three steps to<br>your first commission</div>
+      <p class="section-sub">No complex setup. You get a unique referral link, share it, and we handle everything else.</p>
+      <div class="hiw-grid">
+        <div class="hiw-card">
+          <div class="hiw-num">01</div>
+          <div class="hiw-icon">📋</div>
+          <h3>Apply &amp; get approved</h3>
+          <p>Fill out a short form. We review within 2–3 business days and activate your partner account with your unique referral link.</p>
+        </div>
+        <div class="hiw-card">
+          <div class="hiw-num">02</div>
+          <div class="hiw-icon">🔗</div>
+          <h3>Share your link</h3>
+          <p>Use your referral link in emails, content, social posts, or client proposals. Anyone who signs up through your link is tagged to you.</p>
+        </div>
+        <div class="hiw-card">
+          <div class="hiw-num">03</div>
+          <div class="hiw-icon">💰</div>
+          <h3>Earn every month</h3>
+          <p>You earn commission every month your referral stays subscribed — forever. As you refer more, you climb tiers and earn higher rates.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Commission tiers ── -->
+  <section id="tiers" class="tier-section">
+    <div class="section-inner">
+      <div class="section-tag">Commission tiers</div>
+      <div class="section-title">The more you refer,<br>the more you earn</div>
+      <p class="section-sub">Your tier is determined by your total active referrals. Climb automatically — no applications required.</p>
+      <div class="tier-grid">
+        <div class="tier-card">
+          <div class="tier-medal">🥉</div>
+          <div class="tier-name">Bronze</div>
+          <div class="tier-threshold">1–4 active referrals</div>
+          <div class="tier-rate">20%</div>
+          <div class="tier-rate-label">recurring commission</div>
+          <ul class="tier-perks">
+            <li>Unique referral link</li>
+            <li>Partner dashboard</li>
+            <li>Monthly payouts</li>
+            <li>Brand kit access</li>
+          </ul>
+        </div>
+        <div class="tier-card">
+          <div class="tier-medal">🥈</div>
+          <div class="tier-name">Silver</div>
+          <div class="tier-threshold">5–9 active referrals</div>
+          <div class="tier-rate">25%</div>
+          <div class="tier-rate-label">recurring commission</div>
+          <ul class="tier-perks">
+            <li>Everything in Bronze</li>
+            <li>Priority email support</li>
+            <li>Co-marketing content</li>
+            <li>Featured in directory</li>
+          </ul>
+        </div>
+        <div class="tier-card featured">
+          <div class="tier-medal">🥇</div>
+          <div class="tier-name">Gold</div>
+          <div class="tier-threshold">10–19 active referrals</div>
+          <div class="tier-rate">30%</div>
+          <div class="tier-rate-label">recurring commission</div>
+          <ul class="tier-perks">
+            <li>Everything in Silver</li>
+            <li>Dedicated account manager</li>
+            <li>Custom landing page</li>
+            <li>Co-branded proposals</li>
+          </ul>
+        </div>
+        <div class="tier-card">
+          <div class="tier-medal">💎</div>
+          <div class="tier-name">Platinum</div>
+          <div class="tier-threshold">20+ active referrals</div>
+          <div class="tier-rate">35%</div>
+          <div class="tier-rate-label">recurring commission</div>
+          <ul class="tier-perks">
+            <li>Everything in Gold</li>
+            <li>Quarterly strategy calls</li>
+            <li>Early feature access</li>
+            <li>Revenue share bonuses</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Commission calculator ── -->
+  <section id="calculator" class="calc-section">
+    <div class="section-inner">
+      <div class="section-tag">Earnings calculator</div>
+      <div class="section-title">See what you could earn</div>
+      <div class="calc-card">
+        <div class="calc-inputs">
+          <div class="calc-label">Number of active referrals: <strong id="referral-count-display">10</strong></div>
+          <input type="range" class="calc-slider" id="referral-slider" min="1" max="50" value="10" oninput="updateCalc()" />
+          <div class="calc-slider-labels"><span>1</span><span>10</span><span>25</span><span>50</span></div>
+
+          <div class="calc-label" style="margin-top: 24px;">Average plan per customer</div>
+          <select class="calc-select" id="plan-select" onchange="updateCalc()">
+            <option value="49">Solo — €49/mo</option>
+            <option value="149" selected>Business — €149/mo</option>
+            <option value="299">Agency — €299/mo</option>
+          </select>
+        </div>
+
+        <div class="calc-result">
+          <div class="calc-tier-badge" id="calc-tier-badge">🥇 Gold tier · 30%</div>
+          <div class="calc-monthly" id="calc-monthly">€447</div>
+          <div class="calc-monthly-label">per month</div>
+          <div class="calc-yearly" id="calc-yearly">€5,364 / year</div>
+          <div class="calc-yearly-label">recurring income</div>
+          <div class="calc-breakdown" id="calc-breakdown">
+            10 referrals × €149 avg = €1,490 MRR<br>
+            Gold tier commission: 30%
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Why Vouch ── -->
+  <section>
+    <div class="section-inner">
+      <div class="section-tag">Why partner with Vouch</div>
+      <div class="section-title">Built to make you<br>money long-term</div>
+      <div class="why-grid">
+        <div class="why-card">
+          <div class="why-icon">♻️</div>
+          <h3>Lifetime recurring revenue</h3>
+          <p>Earn every month your referral stays subscribed — not just a one-time fee. Build a real passive income stream over time.</p>
+        </div>
+        <div class="why-card">
+          <div class="why-icon">📈</div>
+          <h3>High retention product</h3>
+          <p>Vouch customers average 14+ months of subscription. Your commissions compound because clients stay, not just because they sign up.</p>
+        </div>
+        <div class="why-card">
+          <div class="why-icon">🎯</div>
+          <h3>Easy sell for agencies</h3>
+          <p>Video testimonials are on every agency's service roadmap. Vouch makes it easy to pitch — and easy to deliver — with your referral link attached.</p>
+        </div>
+        <div class="why-card">
+          <div class="why-icon">🛠️</div>
+          <h3>Done-for-you marketing kit</h3>
+          <p>Email templates, social copy, one-pagers, and co-branded PDFs — everything you need to promote Vouch without building it yourself.</p>
+        </div>
+        <div class="why-card">
+          <div class="why-icon">📊</div>
+          <h3>Real-time tracking</h3>
+          <p>Your partner dashboard shows every click, signup, and commission in real time. No guessing, no delays, no spreadsheets.</p>
+        </div>
+        <div class="why-card">
+          <div class="why-icon">⚡</div>
+          <h3>Fast payouts</h3>
+          <p>Request your payout directly from the dashboard. We process within 5 business days via bank transfer or PayPal.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Partner testimonials ── -->
+  <section class="testimonials-section">
+    <div class="section-inner">
+      <div class="section-tag">Partner stories</div>
+      <div class="section-title">Real partners,<br>real recurring revenue</div>
+      <div class="testimonials-grid">
+        <div class="quote-card">
+          <div class="quote-stars">★★★★★</div>
+          <div class="quote-text">"I added Vouch to my agency's recommended stack and started earning immediately. My first 6 referrals generate over €700/month passively."</div>
+          <div class="quote-author">Sophie M.</div>
+          <div class="quote-role">Marketing Agency Owner, Amsterdam</div>
+          <div class="quote-tier">🥇 Gold Partner</div>
+        </div>
+        <div class="quote-card">
+          <div class="quote-stars">★★★★★</div>
+          <div class="quote-text">"The partner dashboard is excellent. I can see every referral, every commission earned, and request payouts in one click. It's genuinely passive income."</div>
+          <div class="quote-author">Daniel K.</div>
+          <div class="quote-role">Business Coach &amp; Consultant, Dublin</div>
+          <div class="quote-tier">🥈 Silver Partner</div>
+        </div>
+        <div class="quote-card">
+          <div class="quote-stars">★★★★★</div>
+          <div class="quote-text">"We've referred 24 clients and earn over €2,100/month at Platinum tier. It's become a meaningful revenue line for our consultancy."</div>
+          <div class="quote-author">Priya R.</div>
+          <div class="quote-role">Digital Strategy Consultancy, London</div>
+          <div class="quote-tier">💎 Platinum Partner</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── FAQ ── -->
+  <section id="faq">
+    <div class="section-inner">
+      <div class="section-tag">FAQ</div>
+      <div class="section-title">Common questions</div>
+      <div class="faq-list">
+        <div class="faq-item">
+          <button class="faq-question" onclick="toggleFaq(this)">
+            Who is eligible to join the partner program?
+            <div class="faq-chevron">▾</div>
+          </button>
+          <div class="faq-answer"><p>Anyone can apply — agencies, consultants, coaches, content creators, or individual entrepreneurs. We review each application manually and approve partners who have a genuine audience or client base that would benefit from Vouch.</p></div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-question" onclick="toggleFaq(this)">
+            How does commission tracking work?
+            <div class="faq-chevron">▾</div>
+          </button>
+          <div class="faq-answer"><p>When someone visits vouchbusiness.com through your referral link, we store their referral in a browser cookie and localStorage. If they sign up within 90 days — even on a different session — the signup is attributed to you. Commissions are calculated monthly based on active subscribers.</p></div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-question" onclick="toggleFaq(this)">
+            When and how do I get paid?
+            <div class="faq-chevron">▾</div>
+          </button>
+          <div class="faq-answer"><p>Commissions are calculated on the 1st of each month for the previous month's revenue. You can request a payout anytime from your partner dashboard once you have €50 or more in pending earnings. We pay via bank transfer or PayPal within 5 business days.</p></div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-question" onclick="toggleFaq(this)">
+            How do I move up tiers?
+            <div class="faq-chevron">▾</div>
+          </button>
+          <div class="faq-answer"><p>Tier upgrades are automatic and happen at the start of each month based on your total active referrals. If you have 10 or more active subscribers who came through your link, you'll be bumped to Gold. Downgrading works the same way — if referrals churn, your tier adjusts accordingly.</p></div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-question" onclick="toggleFaq(this)">
+            Does the commission apply to upgrades?
+            <div class="faq-chevron">▾</div>
+          </button>
+          <div class="faq-answer"><p>Yes. If your referral starts on Solo and upgrades to Business or Agency, your commission is calculated on their new, higher plan price. You benefit when your referrals grow.</p></div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-question" onclick="toggleFaq(this)">
+            Do I need to be a Vouch customer to partner?
+            <div class="faq-chevron">▾</div>
+          </button>
+          <div class="faq-answer"><p>No, but we strongly recommend it. Partners who use Vouch themselves convert referrals at a much higher rate because they speak from genuine experience. We offer partner accounts at a discounted rate — reach out after approval to discuss.</p></div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-question" onclick="toggleFaq(this)">
+            Is there a limit to how much I can earn?
+            <div class="faq-chevron">▾</div>
+          </button>
+          <div class="faq-answer"><p>No cap. The more active referrals you have, the more you earn — and at higher commission rates as you climb tiers. Our top partners earn €2,000+ per month in recurring commissions.</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Final CTA ── -->
+  <section class="cta-section">
+    <div class="section-tag" style="margin-bottom: 20px;">Ready to start?</div>
+    <h2>Turn your network into<br><em>recurring revenue</em></h2>
+    <p>Join the Vouch Partner Program and start earning lifetime commissions. Applications reviewed within 2–3 business days.</p>
+    <button class="btn-gold" onclick="openModal()" style="font-size: 1.05rem; padding: 16px 36px;">Apply to Partner — It's Free →</button>
+  </section>
+
+  <!-- ── Footer ── -->
+  <footer>
+    <p>
+      &copy; 2026 <a href="/">Vouch</a> &nbsp;&middot;&nbsp;
+      <a href="/terms">Terms</a> &nbsp;&middot;&nbsp;
+      <a href="/privacy">Privacy</a> &nbsp;&middot;&nbsp;
+      <a href="mailto:hello@vouchbusiness.com">hello@vouchbusiness.com</a>
+    </p>
+  </footer>
+
+  <!-- ── Partner Signup Modal ── -->
+  <div class="modal-overlay" id="modal-overlay" onclick="handleOverlayClick(event)">
+    <div class="modal" id="modal">
+      <div id="form-view">
+        <div class="modal-title">Apply to Partner</div>
+        <p class="modal-sub">We review every application personally. Expect a response within 2–3 business days.</p>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Full name *</label>
+            <input type="text" id="f-name" placeholder="Jane Smith" autocomplete="name" />
+          </div>
+          <div class="form-group">
+            <label>Email address *</label>
+            <input type="email" id="f-email" placeholder="jane@agency.com" autocomplete="email" />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Company / Brand</label>
+            <input type="text" id="f-company" placeholder="Acme Agency" />
+          </div>
+          <div class="form-group">
+            <label>Website</label>
+            <input type="url" id="f-website" placeholder="https://yoursite.com" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label>How will you promote Vouch?</label>
+          <textarea id="f-reason" placeholder="e.g. I run an agency with 50+ clients who need video testimonials. I'll offer Vouch as part of our social proof package..."></textarea>
+        </div>
+        <div class="form-error" id="form-error"></div>
+        <div class="modal-actions">
+          <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+          <button class="btn-submit" id="submit-btn" onclick="submitForm()">Submit Application →</button>
+        </div>
+      </div>
+
+      <div class="form-success" id="success-view">
+        <div class="success-icon">✦</div>
+        <h3>Application received!</h3>
+        <p>Thanks for applying. We'll review your application and get back to you within 2–3 business days. Keep an eye on <span id="success-email"></span> for your welcome email.</p>
+        <button class="btn-gold" style="margin-top: 24px; width: 100%; font-size: 0.9rem; padding: 12px;" onclick="closeModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ── Modal ──
+    function openModal() {
+      document.getElementById('modal-overlay').classList.add('open');
+      document.body.style.overflow = 'hidden';
+      document.getElementById('f-name').focus();
+    }
+    function closeModal() {
+      document.getElementById('modal-overlay').classList.remove('open');
+      document.body.style.overflow = '';
+    }
+    function handleOverlayClick(e) {
+      if (e.target === document.getElementById('modal-overlay')) closeModal();
+    }
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+    // ── Form submit ──
+    async function submitForm() {
+      const name    = document.getElementById('f-name').value.trim();
+      const email   = document.getElementById('f-email').value.trim();
+      const company = document.getElementById('f-company').value.trim();
+      const website = document.getElementById('f-website').value.trim();
+      const reason  = document.getElementById('f-reason').value.trim();
+      const errEl   = document.getElementById('form-error');
+      const btn     = document.getElementById('submit-btn');
+
+      errEl.style.display = 'none';
+
+      if (!name) { showError('Please enter your full name.'); return; }
+      if (!email || !email.includes('@')) { showError('Please enter a valid email address.'); return; }
+
+      btn.disabled = true;
+      btn.textContent = 'Submitting…';
+
+      try {
+        const res = await fetch('/api/partner-signup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, email, company, website, reason }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Submission failed');
+
+        document.getElementById('success-email').textContent = email;
+        document.getElementById('form-view').style.display = 'none';
+        document.getElementById('success-view').style.display = 'block';
+      } catch (err) {
+        showError(err.message || 'Something went wrong. Please try again.');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Submit Application →';
+      }
+    }
+
+    function showError(msg) {
+      const el = document.getElementById('form-error');
+      el.textContent = msg;
+      el.style.display = 'block';
+    }
+
+    // ── Calculator ──
+    const TIERS = [
+      { min: 1,  max: 4,  rate: 0.20, label: '🥉 Bronze · 20%',   name: 'Bronze'   },
+      { min: 5,  max: 9,  rate: 0.25, label: '🥈 Silver · 25%',   name: 'Silver'   },
+      { min: 10, max: 19, rate: 0.30, label: '🥇 Gold · 30%',     name: 'Gold'     },
+      { min: 20, max: Infinity, rate: 0.35, label: '💎 Platinum · 35%', name: 'Platinum' },
+    ];
+
+    function getTier(refs) {
+      return TIERS.find(t => refs >= t.min && refs <= t.max);
+    }
+
+    function fmtEur(n) {
+      return '€' + Math.round(n).toLocaleString('en-IE');
+    }
+
+    function updateCalc() {
+      const refs = parseInt(document.getElementById('referral-slider').value, 10);
+      const plan = parseInt(document.getElementById('plan-select').value, 10);
+      const tier = getTier(refs);
+      const mrr = refs * plan;
+      const monthly = mrr * tier.rate;
+      const yearly = monthly * 12;
+
+      document.getElementById('referral-count-display').textContent = refs;
+      document.getElementById('calc-tier-badge').textContent = tier.label;
+      document.getElementById('calc-monthly').textContent = fmtEur(monthly);
+      document.getElementById('calc-yearly').textContent = fmtEur(yearly) + ' / year';
+      document.getElementById('calc-breakdown').innerHTML =
+        `${refs} referral${refs !== 1 ? 's' : ''} × ${fmtEur(plan)} avg = ${fmtEur(mrr)} MRR<br>${tier.name} tier commission: ${Math.round(tier.rate * 100)}%`;
+    }
+
+    updateCalc();
+
+    // ── FAQ accordion ──
+    function toggleFaq(btn) {
+      const item = btn.closest('.faq-item');
+      const isOpen = item.classList.contains('open');
+      document.querySelectorAll('.faq-item.open').forEach(el => el.classList.remove('open'));
+      if (!isOpen) item.classList.add('open');
+    }
+
+    // ── Scroll reveal ──
+    const observer = new IntersectionObserver(entries => {
+      entries.forEach(e => { if (e.isIntersecting) e.target.style.opacity = '1'; });
+    }, { threshold: 0.08 });
+    document.querySelectorAll('.hiw-card, .tier-card, .why-card, .quote-card').forEach(el => {
+      el.style.opacity = '0';
+      el.style.transition = 'opacity 0.5s ease';
+      observer.observe(el);
+    });
+  </script>
+</body>
+</html>

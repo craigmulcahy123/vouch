@@ -37,6 +37,14 @@ const FIREBASE_CONFIG = {
   appId:             "1:455089585165:web:3952731c6780fee4f76944",
 };
 
+// ── Referral tracking — capture ?ref= on any page load ───────────────────────
+(function captureReferral() {
+  try {
+    const ref = new URLSearchParams(window.location.search).get('ref');
+    if (ref) localStorage.setItem('vouchRef', ref);
+  } catch {}
+})();
+
 // ── Lazy Firebase loader ──────────────────────────────────────────────────────
 // Loads Firebase from CDN so no bundler/npm needed in this artifact context.
 let _auth = null;
@@ -3393,6 +3401,259 @@ function QuoteProcessingIndicator({ testimonialId, userId, db }) {
   );
 }
 
+// ── Partner Dashboard ─────────────────────────────────────────────────────────
+function PartnerDashboard({ userId, partnerStats, db }) {
+  const [partnerTab, setPartnerTab] = useState("overview");
+  const [copyDone, setCopyDone] = useState(false);
+  const [payoutLoading, setPayoutLoading] = useState(false);
+  const [payoutSent, setPayoutSent] = useState(false);
+
+  const referralLink = `https://vouchbusiness.com?ref=${userId}`;
+
+  const TIERS = [
+    { min: 1,  max: 4,  rate: 20, label: "Bronze",   medal: "🥉" },
+    { min: 5,  max: 9,  rate: 25, label: "Silver",   medal: "🥈" },
+    { min: 10, max: 19, rate: 30, label: "Gold",     medal: "🥇" },
+    { min: 20, max: Infinity, rate: 35, label: "Platinum", medal: "💎" },
+  ];
+  const { referralCount, totalEarnings, pendingPayout, commissions } = partnerStats;
+  const tier = TIERS.find(t => referralCount >= t.min && referralCount <= t.max) || TIERS[0];
+
+  function copyLink() {
+    navigator.clipboard.writeText(referralLink).then(() => {
+      setCopyDone(true);
+      setTimeout(() => setCopyDone(false), 2000);
+    });
+  }
+
+  async function requestPayout() {
+    if (pendingPayout < 50) return;
+    setPayoutLoading(true);
+    try {
+      await db.collection("users").doc(userId).set({ payoutRequested: true, payoutRequestedAt: Date.now() }, { merge: true });
+      setPayoutSent(true);
+    } catch (e) {
+      console.error("[vouch] payout request failed:", e.message);
+    }
+    setPayoutLoading(false);
+  }
+
+  const partnerTabs = [
+    { key: "overview",   label: "Overview"   },
+    { key: "earnings",   label: "Earnings"   },
+    { key: "resources",  label: "Resources"  },
+    { key: "leaderboard",label: "Leaderboard"},
+  ];
+
+  return (
+    <div style={{ maxWidth: 680 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
+        <div>
+          <div className="section-title serif" style={{ margin: 0 }}>Partner Program</div>
+          <div style={{ color: "var(--muted)", fontSize: "0.88rem", marginTop: 4 }}>Earn recurring commissions for every business you refer</div>
+        </div>
+        <div style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(200,169,110,0.12)", border: "1px solid rgba(200,169,110,0.3)", borderRadius: 99, padding: "4px 14px", fontSize: "0.82rem", fontWeight: 700, color: "var(--gold)", flexShrink: 0 }}>
+          {tier.medal} {tier.label} · {tier.rate}%
+        </div>
+      </div>
+
+      {/* Sub-tabs */}
+      <div style={{ display: "flex", gap: 4, marginBottom: 28, background: "var(--cream)", borderRadius: 10, padding: 4 }}>
+        {partnerTabs.map(({ key, label }) => (
+          <button key={key} onClick={() => setPartnerTab(key)} style={{
+            flex: 1, padding: "8px 4px", borderRadius: 7, border: "none", cursor: "pointer",
+            background: partnerTab === key ? "#fff" : "transparent",
+            color: partnerTab === key ? "var(--ink)" : "var(--muted)",
+            fontWeight: partnerTab === key ? 700 : 500,
+            fontFamily: "DM Sans, sans-serif", fontSize: "0.82rem",
+            boxShadow: partnerTab === key ? "0 1px 4px rgba(0,0,0,0.1)" : "none",
+            transition: "all 0.15s",
+          }}>{label}</button>
+        ))}
+      </div>
+
+      {/* Overview */}
+      {partnerTab === "overview" && (
+        <>
+          {/* Stats row */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 20 }}>
+            {[
+              { label: "Active referrals", value: referralCount },
+              { label: "Total earned", value: `€${(totalEarnings || 0).toFixed(2)}` },
+              { label: "Pending payout", value: `€${(pendingPayout || 0).toFixed(2)}` },
+            ].map(({ label, value }) => (
+              <div key={label} style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: "18px 20px" }}>
+                <div style={{ fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)", marginBottom: 8 }}>{label}</div>
+                <div style={{ fontFamily: "Instrument Serif, serif", fontSize: "1.7rem", color: "var(--gold)", lineHeight: 1 }}>{value}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Referral link */}
+          <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 14, padding: "20px 24px", marginBottom: 16 }}>
+            <div style={{ fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)", marginBottom: 10 }}>Your referral link</div>
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <div style={{ flex: 1, background: "var(--cream)", border: "1px solid var(--border)", borderRadius: 8, padding: "10px 14px", fontFamily: "monospace", fontSize: "0.83rem", color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>
+                {referralLink}
+              </div>
+              <button className="btn btn-gold btn-sm" onClick={copyLink} style={{ flexShrink: 0 }}>
+                {copyDone ? "✓ Copied!" : "Copy link"}
+              </button>
+            </div>
+            <div style={{ fontSize: "0.78rem", color: "var(--muted)", marginTop: 8 }}>
+              Anyone who signs up through this link earns you {tier.rate}% recurring commission.
+            </div>
+          </div>
+
+          {/* Tier progress */}
+          <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 14, padding: "20px 24px" }}>
+            <div style={{ fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)", marginBottom: 14 }}>Tier progress</div>
+            <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+              {TIERS.map(t => {
+                const isActive = t.label === tier.label;
+                const isPast = TIERS.indexOf(t) < TIERS.indexOf(tier);
+                return (
+                  <div key={t.label} style={{ flex: 1, textAlign: "center" }}>
+                    <div style={{ fontSize: "1.4rem", marginBottom: 4 }}>{t.medal}</div>
+                    <div style={{ fontSize: "0.72rem", fontWeight: isActive ? 700 : 500, color: isActive ? "var(--gold)" : isPast ? "#aaa" : "var(--muted)" }}>{t.label}</div>
+                    <div style={{ fontSize: "0.7rem", color: "var(--muted)" }}>{t.rate}%</div>
+                    <div style={{ height: 3, borderRadius: 99, background: isActive || isPast ? "var(--gold)" : "var(--border)", marginTop: 6 }} />
+                  </div>
+                );
+              })}
+            </div>
+            {tier.label !== "Platinum" && (
+              <div style={{ fontSize: "0.8rem", color: "var(--muted)", marginTop: 6 }}>
+                {(() => {
+                  const nextTier = TIERS[TIERS.indexOf(tier) + 1];
+                  const needed = nextTier ? nextTier.min - referralCount : 0;
+                  return `${needed} more active referral${needed !== 1 ? "s" : ""} to reach ${nextTier?.label} (${nextTier?.rate}%)`;
+                })()}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Earnings */}
+      {partnerTab === "earnings" && (
+        <>
+          {/* Payout card */}
+          <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 14, padding: "20px 24px", marginBottom: 16 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
+              <div>
+                <div style={{ fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)", marginBottom: 6 }}>Pending payout</div>
+                <div style={{ fontFamily: "Instrument Serif, serif", fontSize: "2rem", color: "var(--gold)", lineHeight: 1 }}>€{(pendingPayout || 0).toFixed(2)}</div>
+                <div style={{ fontSize: "0.78rem", color: "var(--muted)", marginTop: 4 }}>Minimum payout: €50</div>
+              </div>
+              {payoutSent ? (
+                <div style={{ color: "#5cb87a", fontWeight: 600, fontSize: "0.88rem" }}>✓ Payout requested — we'll process within 5 business days</div>
+              ) : (
+                <button className="btn btn-gold" disabled={pendingPayout < 50 || payoutLoading} onClick={requestPayout} style={{ opacity: pendingPayout < 50 ? 0.5 : 1 }}>
+                  {payoutLoading ? "Requesting…" : "Request Payout →"}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Commission history */}
+          <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden" }}>
+            <div style={{ padding: "16px 24px", borderBottom: "1px solid var(--border)" }}>
+              <div style={{ fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)" }}>Commission history</div>
+            </div>
+            {commissions.length === 0 ? (
+              <div style={{ padding: "32px 24px", textAlign: "center", color: "var(--muted)", fontSize: "0.88rem" }}>
+                No commissions yet — share your referral link to start earning.
+              </div>
+            ) : (
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ background: "var(--cream)" }}>
+                    <th style={{ padding: "10px 24px", textAlign: "left", fontSize: "0.75rem", fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Month</th>
+                    <th style={{ padding: "10px 24px", textAlign: "right", fontSize: "0.75rem", fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Commission</th>
+                    <th style={{ padding: "10px 24px", textAlign: "right", fontSize: "0.75rem", fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {commissions.map((c, i) => (
+                    <tr key={i} style={{ borderTop: "1px solid var(--border)" }}>
+                      <td style={{ padding: "12px 24px", fontSize: "0.88rem" }}>{c.month}</td>
+                      <td style={{ padding: "12px 24px", fontSize: "0.88rem", textAlign: "right", fontWeight: 600 }}>€{(c.amount || 0).toFixed(2)}</td>
+                      <td style={{ padding: "12px 24px", textAlign: "right" }}>
+                        <span style={{
+                          fontSize: "0.72rem", fontWeight: 700, padding: "2px 10px", borderRadius: 99,
+                          background: c.status === "paid" ? "#e8f4e8" : "#f4ede8",
+                          color: c.status === "paid" ? "#3a5a3a" : "#8a5020",
+                        }}>{c.status === "paid" ? "Paid" : "Pending"}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Resources */}
+      {partnerTab === "resources" && (
+        <div style={{ display: "grid", gap: 12 }}>
+          {[
+            { title: "Partner Brand Kit", desc: "Vouch logos, color palettes, and usage guidelines for your promotional materials.", icon: "🎨", action: "Download" },
+            { title: "Email Templates", desc: "Done-for-you email copy to introduce Vouch to your clients and audience.", icon: "📧", action: "Copy templates" },
+            { title: "Social Media Copy", desc: "Ready-to-post captions for LinkedIn, Instagram, and Twitter promoting your referral link.", icon: "📱", action: "Copy copy" },
+            { title: "One-Page PDF", desc: "A co-branded PDF you can send to prospects explaining Vouch and its benefits.", icon: "📄", action: "Download PDF" },
+            { title: "Proposal Insert", desc: "Add Vouch to your client proposals with this ready-made service description block.", icon: "📋", action: "Copy block" },
+          ].map(({ title, desc, icon, action }) => (
+            <div key={title} style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12, padding: "18px 20px", display: "flex", alignItems: "center", gap: 16 }}>
+              <div style={{ fontSize: "1.6rem", flexShrink: 0 }}>{icon}</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 600, fontSize: "0.92rem", marginBottom: 3 }}>{title}</div>
+                <div style={{ fontSize: "0.82rem", color: "var(--muted)", lineHeight: 1.5 }}>{desc}</div>
+              </div>
+              <button className="btn btn-sm" style={{ background: "transparent", border: "1px solid var(--border)", color: "var(--muted)", flexShrink: 0 }}
+                onClick={() => alert("Coming soon — email hello@vouchbusiness.com for early access to partner resources.")}>
+                {action}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Leaderboard */}
+      {partnerTab === "leaderboard" && (
+        <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 14, overflow: "hidden" }}>
+          <div style={{ padding: "16px 24px 0", borderBottom: "1px solid var(--border)" }}>
+            <div style={{ fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)", marginBottom: 4 }}>Top Partners</div>
+            <div style={{ fontSize: "0.82rem", color: "var(--muted)", paddingBottom: 12 }}>Updated monthly · anonymised display names</div>
+          </div>
+          {[
+            { rank: 1, name: "S.M.", company: "Scale Digital",      referrals: 47, tier: "💎 Platinum" },
+            { rank: 2, name: "P.R.", company: "GrowthLab Agency",   referrals: 31, tier: "💎 Platinum" },
+            { rank: 3, name: "D.K.", company: "Momentum Consulting",referrals: 24, tier: "💎 Platinum" },
+            { rank: 4, name: "A.T.", company: "BrandForge",         referrals: 18, tier: "🥇 Gold" },
+            { rank: 5, name: "R.B.", company: "Clearpath Agency",   referrals: 14, tier: "🥇 Gold" },
+          ].map(({ rank, name, company, referrals, tier: t }) => (
+            <div key={rank} style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 24px", borderBottom: "1px solid var(--border)" }}>
+              <div style={{ width: 28, height: 28, borderRadius: "50%", background: rank <= 3 ? "rgba(200,169,110,0.15)" : "var(--cream)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: rank <= 3 ? "0.95rem" : "0.78rem", fontWeight: 700, color: rank <= 3 ? "var(--gold)" : "var(--muted)", flexShrink: 0 }}>
+                {rank <= 3 ? ["🥇","🥈","🥉"][rank - 1] : rank}
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 600, fontSize: "0.88rem" }}>{name} · {company}</div>
+                <div style={{ fontSize: "0.78rem", color: "var(--muted)", marginTop: 1 }}>{t}</div>
+              </div>
+              <div style={{ fontWeight: 700, fontSize: "0.88rem", color: "var(--gold)" }}>{referrals} referrals</div>
+            </div>
+          ))}
+          <div style={{ padding: "12px 24px", fontSize: "0.78rem", color: "var(--muted)", textAlign: "center" }}>
+            Live leaderboard from active partner data — updating 1st of each month
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Dashboard ──────────────────────────────────────────────────────────────
 function Dashboard({ onPreview, userId, userEmail, db, storage, onUpgrade }) {
   const [innerTab, setInnerTab] = useState("campaigns");
@@ -3402,7 +3663,11 @@ function Dashboard({ onPreview, userId, userEmail, db, storage, onUpgrade }) {
   const [planLoaded, setPlanLoaded] = useState(false);
   const plan = PLANS[planKey] || PLANS.free;
 
-  // Load plan from Firestore on mount
+  // Partner state — loaded from same user doc
+  const [isPartner, setIsPartner] = useState(false);
+  const [partnerStats, setPartnerStats] = useState({ referralCount: 0, totalEarnings: 0, pendingPayout: 0, commissions: [] });
+
+  // Load plan + partner status from Firestore on mount
   useEffect(() => {
     if (!db || !userId) return;
     const unsubPlan = db.collection("users").doc(userId)
@@ -3411,6 +3676,16 @@ function Dashboard({ onPreview, userId, userEmail, db, storage, onUpgrade }) {
         const stored = data?.plan;
         setPlanKey(PLANS[stored] ? stored : "free");
         setPlanLoaded(true);
+        const partner = data?.partner === true;
+        setIsPartner(partner);
+        if (partner) {
+          setPartnerStats({
+            referralCount: data.referralCount || 0,
+            totalEarnings: data.totalEarnings || 0,
+            pendingPayout: data.pendingPayout || 0,
+            commissions: data.commissions || [],
+          });
+        }
       }, err => {
         console.error("[vouch] plan listener error:", err.message);
         setPlanLoaded(true);
@@ -3694,6 +3969,7 @@ function Dashboard({ onPreview, userId, userEmail, db, storage, onUpgrade }) {
           { key: "invites",      label: "Invites",       icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg> },
           { key: "billing",      label: "Plan & Billing",icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg> },
           { key: "profile",      label: "Profile",       icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> },
+          ...(isPartner ? [{ key: "partners", label: "Partners", icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> }] : []),
         ].map(({ key, label, icon }) => (
           <button key={key} className={`tab-inner ${innerTab === key ? "active" : ""}`} onClick={() => setInnerTab(key)}>
             {icon}
@@ -4221,6 +4497,11 @@ function Dashboard({ onPreview, userId, userEmail, db, storage, onUpgrade }) {
       {/* Profile tab */}
       {innerTab === "profile" && (
         <ProfileSettings db={db} userId={userId} storage={storage} />
+      )}
+
+      {/* Partners tab — only shown when partner: true */}
+      {innerTab === "partners" && isPartner && (
+        <PartnerDashboard userId={userId} partnerStats={partnerStats} db={db} />
       )}
     </div>
   );
@@ -4750,6 +5031,19 @@ function App() {
       window.history.replaceState({}, '', '/');
     }
   }, [user]);
+
+  // Save referredBy to new user's Firestore doc if a vouchRef is in localStorage
+  useEffect(() => {
+    if (!user || !db || user.isAnonymous) return;
+    const ref = localStorage.getItem('vouchRef');
+    if (!ref || ref === user.uid) return;
+    db.collection("users").doc(user.uid).get().then(snap => {
+      if (!snap.exists || !snap.data()?.referredBy) {
+        db.collection("users").doc(user.uid).set({ referredBy: ref }, { merge: true });
+      }
+      localStorage.removeItem('vouchRef');
+    }).catch(e => console.error("[vouch] referral save failed:", e.message));
+  }, [user, db]);
 
   // Public recording route — must be declared before any conditional returns
   const recordCampaignId = window.location.pathname.match(/^\/record\/([^/]+)/)?.[1] || null;
