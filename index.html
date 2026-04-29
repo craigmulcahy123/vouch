@@ -2645,7 +2645,8 @@ function VideoEditor({ testimonial, onClose }) {
 
 // ── Video Playback Modal ──────────────────────────────────────────────────────
 function VideoPlaybackModal({ testimonial, onClose }) {
-  const processed = testimonial.processedVideoURLs || {};
+  const processed    = testimonial.processedVideoURLs || {};
+  const hasProcessed = Object.keys(processed).length > 0;
 
   // Build a unified URL map and ordered key list for the tab strip.
   // Priority: AI highlight → full raw Q MP4s → legacy format tabs → raw WebM fallback.
@@ -4222,7 +4223,7 @@ function Dashboard({ onPreview, userId, userEmail, db, storage, onUpgrade }) {
                       </button>
                     )}
                     {t.videoURLs && Object.keys(t.videoURLs).length > 0 && (
-                      <button className="btn btn-sm btn-primary" onClick={() => setPlaybackTarget(t)}>
+                      <button className="btn btn-sm btn-primary" onClick={() => { console.log("[vouch/watch] Watch clicked —", t.id, t.clientName); setPlaybackTarget(t); }}>
                         ▶ Watch
                       </button>
                     )}
