@@ -117,7 +117,7 @@ exports.processTestimonial = onDocumentWritten(
         await downloadFile(url, localPath);
         const dlSize = fs.existsSync(localPath) ? fs.statSync(localPath).size : 0;
         localVideos[qIdx] = localPath;
-        console.log(`[processTestimonial] downloaded Q${qIdx} → ${localPath} (${(dlSize / 1024).toFixed(0)} KB)`);
+        console.log(`[processTestimonial] downloaded Q${qIdx} → ${(dlSize / 1024 / 1024).toFixed(2)} MB`);
         if (dlSize < 1024) console.warn(`[processTestimonial] ⚠ Q${qIdx} suspiciously small: ${dlSize} bytes`);
       }
 
@@ -158,13 +158,12 @@ exports.processTestimonial = onDocumentWritten(
         }
       }
 
-      // ── 7. Generate quote + AI clip selection ────────────────────────────
+      // ── 7. Generate polished quote from transcript ────────────────────────
       const fullTranscript = Object.entries(transcripts)
         .filter(([, t]) => t)
         .map(([i, t]) => `Question ${Number(i) + 1}:\n${t}`)
         .join("\n\n");
 
-      // Polished testimonial quote from transcript
       let generatedQuote = data.quote && data.quote !== "Processing transcript..." ? data.quote : "";
       if (fullTranscript.trim()) {
         try {
@@ -183,42 +182,14 @@ exports.processTestimonial = onDocumentWritten(
         }
       }
 
-      // AI clip selection — returns startQuestion/startTime/endTime/reason
-      let clipSpec = null;
-      if (fullTranscript.trim()) {
-        try {
-          const clipResponse = await anthropic.messages.create({
-            model: "claude-opus-4-6",
-            max_tokens: 300,
-            messages: [{
-              role: "user",
-              content: `You are a video editor. Here are transcripts from a video testimonial with timestamps. Select the single best 30-60 second moment that would make a compelling social media clip. Look for: specific results or numbers mentioned, emotional moments, strong recommendations, before/after comparisons. Return JSON only, no markdown:\n{"startQuestion":0,"startTime":12.5,"endTime":45.2,"reason":"why this moment was selected"}\n\nTranscripts:\n${fullTranscript}`,
-            }],
-          });
-          const jsonMatch = clipResponse.content[0]?.text?.match(/\{[\s\S]*?\}/);
-          if (jsonMatch) {
-            clipSpec = JSON.parse(jsonMatch[0]);
-            console.log("[processTestimonial] AI clip selection:", clipSpec);
-          }
-        } catch (e) {
-          console.warn("[processTestimonial] clip selection failed:", e.message);
-        }
-      }
-
-      // Resolve clip params — fall back to first 45s of Q1 if AI selection fails
-      const primaryQIdx  = String(clipSpec?.startQuestion ?? 0);
-      const primaryVideo = localVideos[primaryQIdx] ?? Object.values(localVideos)[0];
-      const startSec     = Math.max(0, clipSpec?.startTime ?? 0);
-      const endSec       = clipSpec?.endTime ?? Math.min(startSec + 45, 60);
-      const duration     = Math.max(5, endSec - startSec);
-      const clipReason   = clipSpec?.reason || "First 45 seconds (AI clip selection unavailable)";
-
-      console.log(`[processTestimonial] clip: Q${primaryQIdx} ${startSec}s–${endSec}s (${duration}s) | reason: ${clipReason}`);
-
       const bucket = storage.bucket();
       const processedVideoURLs = {};
 
-      // ── 8a. Render 3 highlight formats (AI selected clip) ────────────────
+      // ── 8a. Render highlight formats — q0 resized, full length, no overlays ─
+      // Using the first question video as the source for all three aspect ratios.
+      // No seeking, no trimming, no drawtext — just a simple scale+pad conversion.
+      const q0Path = localVideos["0"] ?? Object.values(localVideos)[0];
+
       const highlightFormats = [
         { name: "landscape", width: 1920, height: 1080 },
         { name: "portrait",  width: 1080, height: 1920 },
@@ -227,52 +198,52 @@ exports.processTestimonial = onDocumentWritten(
 
       for (const fmt of highlightFormats) {
         const outputPath = path.join(tmpDir, `${testimonialId}_${fmt.name}.mp4`);
-        console.log(`[processTestimonial] rendering highlight ${fmt.name} (${fmt.width}x${fmt.height})`);
+        console.log(`[processTestimonial] rendering ${fmt.name} (${fmt.width}x${fmt.height})`);
 
-        await renderHighlight({
-          inputPath: primaryVideo,
-          outputPath,
-          startSec,
-          duration,
-          width: fmt.width,
-          height: fmt.height,
-          clientName: data.clientName || "",
-          companyName,
-        });
+        try {
+          await renderResized({ inputPath: q0Path, outputPath, width: fmt.width, height: fmt.height });
 
-        const uploadSize = fs.existsSync(outputPath) ? fs.statSync(outputPath).size : 0;
-        console.log(`[processTestimonial] ${fmt.name}: ${(uploadSize / 1024).toFixed(0)} KB`);
+          const uploadSize = fs.existsSync(outputPath) ? fs.statSync(outputPath).size : 0;
+          const uploadMB = uploadSize / 1024 / 1024;
+          console.log(`[processTestimonial] ${fmt.name}: output ${uploadMB.toFixed(2)} MB`);
 
-        if (uploadSize < 50 * 1024) {
-          console.warn(`[processTestimonial] ⚠ ${fmt.name} too small, skipping upload`);
+          if (uploadSize < 1024 * 1024) {
+            console.error(`[processTestimonial] ❌ ${fmt.name} output < 1 MB — skipping upload (likely corrupt)`);
+            try { fs.unlinkSync(outputPath); } catch {}
+            continue;
+          }
+
+          const storagePath = `users/${userId}/processed/${testimonialId}/${fmt.name}.mp4`;
+          await bucket.upload(outputPath, {
+            destination: storagePath,
+            metadata: { contentType: "video/mp4", cacheControl: "public, max-age=31536000" },
+            public: true,
+          });
+          processedVideoURLs[fmt.name] = {
+            url: `https://storage.googleapis.com/${bucket.name}/${storagePath}`,
+            storagePath,
+          };
+          console.log(`[processTestimonial] uploaded ${fmt.name}`);
+        } catch (e) {
+          console.warn(`[processTestimonial] ${fmt.name} render failed:`, e.message);
+        } finally {
           try { fs.unlinkSync(outputPath); } catch {}
-          continue;
         }
-
-        const storagePath = `users/${userId}/processed/${testimonialId}/${fmt.name}.mp4`;
-        await bucket.upload(outputPath, {
-          destination: storagePath,
-          metadata: { contentType: "video/mp4", cacheControl: "public, max-age=31536000" },
-          public: true,
-        });
-        processedVideoURLs[fmt.name] = {
-          url: `https://storage.googleapis.com/${bucket.name}/${storagePath}`,
-          storagePath,
-        };
-        console.log(`[processTestimonial] uploaded ${fmt.name}`);
-        try { fs.unlinkSync(outputPath); } catch {}
       }
 
-      // ── 8b. Convert each raw question video to full MP4 ─────────────────
+      // ── 8b. Convert each raw question video to full MP4 — no trimming ────
       for (const [qIdx, localPath] of Object.entries(localVideos)) {
         const outputPath = path.join(tmpDir, `${testimonialId}_q${qIdx}.mp4`);
         console.log(`[processTestimonial] converting full Q${qIdx} to MP4`);
         try {
           await convertFullVideo(localPath, outputPath);
           const uploadSize = fs.existsSync(outputPath) ? fs.statSync(outputPath).size : 0;
-          console.log(`[processTestimonial] q${qIdx}.mp4: ${(uploadSize / 1024).toFixed(0)} KB`);
+          const uploadMB = uploadSize / 1024 / 1024;
+          console.log(`[processTestimonial] q${qIdx}.mp4: output ${uploadMB.toFixed(2)} MB`);
 
-          if (uploadSize >= 50 * 1024) {
+          if (uploadSize < 1024 * 1024) {
+            console.error(`[processTestimonial] ❌ q${qIdx}.mp4 output < 1 MB — skipping upload (likely corrupt)`);
+          } else {
             const storagePath = `users/${userId}/processed/${testimonialId}/q${qIdx}.mp4`;
             await bucket.upload(outputPath, {
               destination: storagePath,
@@ -284,8 +255,6 @@ exports.processTestimonial = onDocumentWritten(
               storagePath,
             };
             console.log(`[processTestimonial] uploaded q${qIdx}.mp4`);
-          } else {
-            console.warn(`[processTestimonial] ⚠ q${qIdx}.mp4 too small, skipping`);
           }
         } catch (e) {
           console.warn(`[processTestimonial] Q${qIdx} full convert failed:`, e.message);
@@ -306,8 +275,6 @@ exports.processTestimonial = onDocumentWritten(
         processedVideoURLs,
         transcripts,
         transcript: fullTranscript,
-        clipReason,
-        selectedClip: clipSpec,
         ...(generatedQuote ? { quote: generatedQuote } : {}),
       });
       console.log("[processTestimonial] Firestore updated — status: processed");
@@ -356,84 +323,37 @@ function extractAudioWav(inputPath, outputPath, maxSeconds = 60) {
   });
 }
 
-/** Strip characters that break FFmpeg's drawtext filter. */
-function safeForDrawtext(str, maxLen) {
-  return (str || "")
-    .replace(/[^a-zA-Z0-9 .,!?&()\-]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .substring(0, maxLen)
-    .trim();
-}
-
 /**
- * Render one AI highlight clip with intro/outro text overlays.
- * Falls back to plain scale+pad if drawtext fails (e.g. font not found).
- *
- * Output-side -ss is used throughout: browser WebM files have no seek index,
- * so input-side seekInput() produces near-empty output. Output-side decodes
- * from the start and discards frames up to startSec — reliable with all
- * container formats.
- *
- * The drawtext enable expressions reference absolute stream timestamps
- * (which start at startSec after output-side seek), so the intro window is
- * [startSec, startSec+2] and the outro is [startSec+duration-2, startSec+duration].
+ * Resize a full video to target dimensions.
+ * No seeking, no trimming, no text overlays — plain scale+pad conversion.
+ * Logs input and output sizes in MB; the caller skips upload if output < 1 MB.
  */
-async function renderHighlight({ inputPath, outputPath, startSec, duration, width, height, clientName, companyName }) {
-  try {
-    await renderWithOverlays({ inputPath, outputPath, startSec, duration, width, height, clientName, companyName });
-  } catch (e) {
-    console.warn(`[renderHighlight] overlay render failed (${e.message}), retrying without overlays`);
-    // Remove partial output before retry
-    try { fs.unlinkSync(outputPath); } catch {}
-    await renderPlain({ inputPath, outputPath, startSec, duration, width, height });
-  }
-}
-
-function renderWithOverlays({ inputPath, outputPath, startSec, duration, width, height, clientName, companyName }) {
+function renderResized({ inputPath, outputPath, width, height }) {
   return new Promise((resolve, reject) => {
     const stderrLines = [];
     const srcSize = fs.existsSync(inputPath) ? fs.statSync(inputPath).size : 0;
-    console.log(`[FFmpeg] highlight+overlays — ${path.basename(outputPath)} | ${width}x${height} | src:${(srcSize / 1024).toFixed(0)} KB`);
+    console.log(`[FFmpeg] resize — ${path.basename(outputPath)} | ${width}x${height} | input: ${(srcSize / 1024 / 1024).toFixed(2)} MB`);
 
-    const nameSafe    = safeForDrawtext(clientName, 40);
-    const companySafe = safeForDrawtext(companyName, 40);
-
-    // Absolute timestamps for enable expressions (stream PTS starts at startSec
-    // after output-side -ss, so we reference [startSec, startSec+2] for intro)
-    const introEnd   = startSec + 2;
-    const outroStart = startSec + Math.max(duration - 2, 0);
-    const outroEnd   = startSec + duration;
-
-    const filters = [
+    const vf = [
       `scale=${width}:${height}:force_original_aspect_ratio=decrease`,
       `pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black`,
-    ];
-    if (nameSafe) {
-      filters.push(`drawtext=text='${nameSafe}':x=(w-tw)/2:y=h-170:fontsize=36:fontcolor=white:shadowcolor=black@0.8:shadowx=2:shadowy=2:enable='between(t,${startSec},${introEnd})'`);
-    }
-    if (companySafe) {
-      filters.push(`drawtext=text='${companySafe}':x=(w-tw)/2:y=h-124:fontsize=22:fontcolor=white@0.85:shadowcolor=black@0.8:shadowx=1:shadowy=1:enable='between(t,${startSec},${introEnd})'`);
-    }
-    filters.push(`drawtext=text='Vouch Verified':x=(w-tw)/2:y=h-80:fontsize=24:fontcolor=#c8a96e:shadowcolor=black@0.8:shadowx=1:shadowy=1:enable='between(t,${outroStart},${outroEnd})'`);
-
-    const outputOpts = [`-t ${duration}`, `-crf 23`, `-preset fast`, `-movflags +faststart`];
-    if (startSec > 0) outputOpts.unshift(`-ss ${startSec}`);
+    ].join(",");
 
     ffmpeg(inputPath)
-      .videoFilter(filters.join(","))
+      .videoFilter(vf)
       .videoCodec("libx264")
       .audioCodec("aac")
-      .outputOptions(outputOpts)
+      .outputOptions(["-crf 23", "-preset fast", "-movflags +faststart"])
       .on("stderr", line => {
         stderrLines.push(line);
-        if (/frame=|fps=|error|Error|invalid/i.test(line)) console.log("[FFmpeg stderr]", line);
+        if (/frame=|fps=|error|Error/i.test(line)) console.log("[FFmpeg stderr]", line);
       })
       .on("end", () => {
         const outSize = fs.existsSync(outputPath) ? fs.statSync(outputPath).size : 0;
-        console.log(`[FFmpeg] ✅ ${path.basename(outputPath)} — ${(outSize / 1024).toFixed(0)} KB`);
-        if (outSize < 50 * 1024) {
-          console.warn(`[FFmpeg] ⚠ output < 50 KB — stderr:\n${stderrLines.join("\n")}`);
+        const outMB = outSize / 1024 / 1024;
+        console.log(`[FFmpeg] ✅ ${path.basename(outputPath)} — output: ${outMB.toFixed(2)} MB`);
+        if (outSize < 1024 * 1024) {
+          console.error(`[FFmpeg] ❌ output < 1 MB — likely corrupt. stderr:\n${stderrLines.join("\n")}`);
         }
         resolve();
       })
@@ -445,43 +365,16 @@ function renderWithOverlays({ inputPath, outputPath, startSec, duration, width, 
   });
 }
 
-function renderPlain({ inputPath, outputPath, startSec, duration, width, height }) {
-  return new Promise((resolve, reject) => {
-    const stderrLines = [];
-    const vf = [
-      `scale=${width}:${height}:force_original_aspect_ratio=decrease`,
-      `pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black`,
-    ].join(",");
-    const outputOpts = [`-t ${duration}`, `-crf 23`, `-preset fast`, `-movflags +faststart`];
-    if (startSec > 0) outputOpts.unshift(`-ss ${startSec}`);
-    ffmpeg(inputPath)
-      .videoFilter(vf)
-      .videoCodec("libx264")
-      .audioCodec("aac")
-      .outputOptions(outputOpts)
-      .on("stderr", line => { stderrLines.push(line); })
-      .on("end", () => {
-        const outSize = fs.existsSync(outputPath) ? fs.statSync(outputPath).size : 0;
-        console.log(`[FFmpeg] ✅ plain ${path.basename(outputPath)} — ${(outSize / 1024).toFixed(0)} KB`);
-        if (outSize < 50 * 1024) {
-          console.warn(`[FFmpeg] ⚠ plain output < 50 KB — stderr:\n${stderrLines.join("\n")}`);
-        }
-        resolve();
-      })
-      .on("error", err => {
-        console.error(`[FFmpeg] ❌ plain: ${err.message}\nstderr:\n${stderrLines.join("\n")}`);
-        reject(err);
-      })
-      .save(outputPath);
-  });
-}
-
-/** Convert a full WebM to MP4 without any trimming — preserves the entire question. */
+/**
+ * Convert a full WebM to MP4 without any seeking or trimming.
+ * Logs input and output sizes in MB; the caller skips upload if output < 1 MB.
+ */
 function convertFullVideo(inputPath, outputPath) {
   return new Promise((resolve, reject) => {
     const stderrLines = [];
     const srcSize = fs.existsSync(inputPath) ? fs.statSync(inputPath).size : 0;
-    console.log(`[FFmpeg] full convert — ${path.basename(outputPath)} | src:${(srcSize / 1024).toFixed(0)} KB`);
+    console.log(`[FFmpeg] full convert — ${path.basename(outputPath)} | input: ${(srcSize / 1024 / 1024).toFixed(2)} MB`);
+
     ffmpeg(inputPath)
       .videoCodec("libx264")
       .audioCodec("aac")
@@ -492,9 +385,10 @@ function convertFullVideo(inputPath, outputPath) {
       })
       .on("end", () => {
         const outSize = fs.existsSync(outputPath) ? fs.statSync(outputPath).size : 0;
-        console.log(`[FFmpeg] ✅ ${path.basename(outputPath)} — ${(outSize / 1024).toFixed(0)} KB`);
-        if (outSize < 50 * 1024) {
-          console.warn(`[FFmpeg] ⚠ full convert < 50 KB:\n${stderrLines.join("\n")}`);
+        const outMB = outSize / 1024 / 1024;
+        console.log(`[FFmpeg] ✅ ${path.basename(outputPath)} — output: ${outMB.toFixed(2)} MB`);
+        if (outSize < 1024 * 1024) {
+          console.error(`[FFmpeg] ❌ output < 1 MB — likely corrupt. stderr:\n${stderrLines.join("\n")}`);
         }
         resolve();
       })
