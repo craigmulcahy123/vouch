@@ -345,8 +345,9 @@ async function normalizeClipRobust(inputPath, outputPath, probeInfo) {
   const isH264  = videoCodec === "h264";
   const isAAC   = audioCodec === "aac";
 
-  // Scale+pad filter used by attempts that re-encode video
-  const VF = "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1";
+  // Scale+pad+setsar+fps filter — fps=30 in the filter chain enforces CFR more
+  // reliably than -r alone for VFR browser recordings.
+  const VF = "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,fps=30";
 
   const attempts = [
     {
@@ -354,7 +355,7 @@ async function normalizeClipRobust(inputPath, outputPath, probeInfo) {
       vf: VF,
       videoCodec: "libx264",
       audioCodec: "aac",
-      extraOpts: ["-r 30", "-ar 44100", "-ac 2", "-preset fast", "-crf 23", "-movflags +faststart"],
+      extraOpts: ["-ar 44100", "-ac 2", "-preset slow", "-crf 18", "-pix_fmt yuv420p", "-vsync cfr", "-movflags +faststart"],
     },
     {
       // Skip if already H.264 — copy video saves time and avoids re-encode quality loss
@@ -453,7 +454,9 @@ function concatMerge(inputPaths, outputPath) {
     ffmpeg()
       .input(concatTxt)
       .inputOptions(["-f concat", "-safe 0"])
-      .outputOptions(["-c copy", "-movflags +faststart"])
+      .videoCodec("libx264")
+      .audioCodec("aac")
+      .outputOptions(["-preset slow", "-crf 18", "-pix_fmt yuv420p", "-ar 44100", "-ac 2", "-vsync cfr", "-movflags +faststart"])
       .on("stderr", line => {
         stderrLines.push(line);
         if (/frame=|fps=|error|Error/i.test(line)) console.log("[FFmpeg stderr]", line);
@@ -488,10 +491,10 @@ function resizeVideo({ inputPath, outputPath, width, height }) {
     console.log(`[FFmpeg] resize — ${path.basename(outputPath)} | ${width}x${height} | input: ${srcMB.toFixed(2)} MB`);
 
     ffmpeg(inputPath)
-      .videoFilter(`scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1`)
+      .videoFilter(`scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,fps=30`)
       .videoCodec("libx264")
       .audioCodec("aac")
-      .outputOptions(["-preset fast", "-crf 23", "-movflags +faststart"])
+      .outputOptions(["-preset slow", "-crf 18", "-pix_fmt yuv420p", "-vsync cfr", "-movflags +faststart"])
       .on("stderr", line => {
         stderrLines.push(line);
         if (/frame=|fps=|error|Error/i.test(line)) console.log("[FFmpeg stderr]", line);
