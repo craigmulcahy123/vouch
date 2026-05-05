@@ -12,6 +12,8 @@ const fs   = require("fs");
 
 admin.initializeApp();
 ffmpeg.setFfmpegPath(ffmpegPath);
+// ffprobe lives alongside ffmpeg in the @ffmpeg-installer static build
+ffmpeg.setFfprobePath(ffmpegPath.replace(/ffmpeg(\.exe)?$/, (_, ext) => `ffprobe${ext || ""}`));
 
 const db      = admin.firestore();
 const storage = admin.storage();
@@ -130,16 +132,33 @@ exports.processTestimonial = onDocumentWritten(
         throw new Error("All video downloads failed — nothing to process");
       }
 
-      // ── 6. Normalize each clip to 1920×1080 30fps 44100Hz stereo ────────
+      // ── 6. Probe + normalize each clip to 1920×1080 30fps 44100Hz stereo ──
       // Uniform specs are required for concat -c copy to work correctly.
       const normalizedPaths = {};  // { "0": "/tmp/..._q0_norm.mp4", ... }
 
-      for (const [qIdx, webmPath] of Object.entries(localWebms)) {
+      for (const [qIdx, srcPath] of Object.entries(localWebms)) {
         const normPath = path.join(tmpDir, `${testimonialId}_q${qIdx}_norm.mp4`);
+
+        // Probe the actual file format before choosing an encode strategy
+        let probeInfo = null;
         try {
-          await normalizeClip(webmPath, normPath);
+          probeInfo = await probeVideo(srcPath);
+          const vs = probeInfo.streams.find(s => s.codec_type === "video");
+          const as = probeInfo.streams.find(s => s.codec_type === "audio");
+          console.log(
+            `[processTestimonial] Q${qIdx} probe — ` +
+            `format: ${probeInfo.format?.format_name} | ` +
+            `video: ${vs?.codec_name ?? "none"} ${vs?.width}x${vs?.height} | ` +
+            `audio: ${as?.codec_name ?? "none"} ${as?.sample_rate}Hz`,
+          );
+        } catch (e) {
+          console.warn(`[processTestimonial] ⚠ Q${qIdx} probe failed (will still attempt normalize): ${e.message}`);
+        }
+
+        try {
+          await normalizeClipRobust(srcPath, normPath, probeInfo);
           const normSize = fs.existsSync(normPath) ? fs.statSync(normPath).size : 0;
-          console.log(`[processTestimonial] normalized Q${qIdx} — ${(normSize / 1024 / 1024).toFixed(2)} MB`);
+          console.log(`[processTestimonial] Q${qIdx} normalized — ${(normSize / 1024 / 1024).toFixed(2)} MB`);
           if (normSize < 1024 * 1024) {
             console.warn(`[processTestimonial] ⚠ Q${qIdx} normalized output < 1 MB — skipping`);
           } else {
@@ -293,36 +312,123 @@ function downloadFile(url, destPath) {
   });
 }
 
+/** Run ffprobe on a file and return the parsed metadata object. */
+function probeVideo(filePath) {
+  return new Promise((resolve, reject) => {
+    ffmpeg.ffprobe(filePath, (err, metadata) => {
+      if (err) reject(err);
+      else resolve(metadata);
+    });
+  });
+}
+
 /**
- * Normalize a WebM (or any video) to a consistent spec for concat:
+ * Normalize any video to a consistent spec for concat:
  *   1920×1080, 30 fps, libx264/aac, 44100 Hz stereo, faststart.
- * No seeking, no trimming, no drawtext.
+ *
+ * Tries three strategies in order, stopping at the first one that produces
+ * a file ≥ 1 MB. Logs the full FFmpeg stderr on every failure.
+ *
+ * Strategy order:
+ *   1. Full re-encode — libx264 + aac (handles WebM, VP8/VP9, missing keyframes)
+ *   2. Copy video + re-encode audio — faster when video is already H.264
+ *   3. Copy both streams — last resort remux
  */
-function normalizeClip(inputPath, outputPath) {
+async function normalizeClipRobust(inputPath, outputPath, probeInfo) {
+  const srcMB = (fs.existsSync(inputPath) ? fs.statSync(inputPath).size : 0) / 1024 / 1024;
+  console.log(`[normalize] ${path.basename(inputPath)} → ${path.basename(outputPath)} | input: ${srcMB.toFixed(2)} MB`);
+
+  const vs = probeInfo?.streams?.find(s => s.codec_type === "video");
+  const as = probeInfo?.streams?.find(s => s.codec_type === "audio");
+  const videoCodec = vs?.codec_name ?? "unknown";
+  const audioCodec = as?.codec_name ?? "unknown";
+  const isH264  = videoCodec === "h264";
+  const isAAC   = audioCodec === "aac";
+
+  // Scale+pad filter used by attempts that re-encode video
+  const VF = "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1";
+
+  const attempts = [
+    {
+      label: "full re-encode libx264+aac",
+      vf: VF,
+      videoCodec: "libx264",
+      audioCodec: "aac",
+      extraOpts: ["-r 30", "-ar 44100", "-ac 2", "-preset fast", "-crf 23", "-movflags +faststart"],
+    },
+    {
+      // Skip if already H.264 — copy video saves time and avoids re-encode quality loss
+      label: "copy video + encode aac audio",
+      skip: !isH264,
+      vf: null,
+      videoCodec: "copy",
+      audioCodec: "aac",
+      extraOpts: ["-ar 44100", "-ac 2", "-movflags +faststart"],
+    },
+    {
+      label: "copy both streams (remux only)",
+      vf: null,
+      videoCodec: "copy",
+      audioCodec: "copy",
+      extraOpts: ["-movflags +faststart"],
+    },
+  ];
+
+  for (const attempt of attempts) {
+    if (attempt.skip) {
+      console.log(`[normalize] skipping "${attempt.label}" (not applicable)`);
+      continue;
+    }
+    // Remove any partial output before each attempt
+    try { if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath); } catch {}
+
+    console.log(`[normalize] trying: ${attempt.label}`);
+    try {
+      await runNormalize(inputPath, outputPath, attempt);
+      const outSize = fs.existsSync(outputPath) ? fs.statSync(outputPath).size : 0;
+      if (outSize >= 1024 * 1024) {
+        console.log(`[normalize] ✅ succeeded — ${attempt.label} | output: ${(outSize / 1024 / 1024).toFixed(2)} MB`);
+        return;
+      }
+      console.warn(`[normalize] ⚠ "${attempt.label}" produced ${outSize} bytes (< 1 MB) — trying next`);
+    } catch (e) {
+      console.warn(`[normalize] ❌ "${attempt.label}" threw: ${e.message}`);
+    }
+  }
+
+  throw new Error(`All normalization attempts failed for ${path.basename(inputPath)} (video:${videoCodec} audio:${audioCodec})`);
+}
+
+/** Low-level FFmpeg encode call used by normalizeClipRobust. */
+function runNormalize(inputPath, outputPath, { vf, videoCodec, audioCodec, extraOpts }) {
   return new Promise((resolve, reject) => {
     const stderrLines = [];
-    const srcMB = (fs.existsSync(inputPath) ? fs.statSync(inputPath).size : 0) / 1024 / 1024;
-    console.log(`[FFmpeg] normalize — ${path.basename(inputPath)} → ${path.basename(outputPath)} | input: ${srcMB.toFixed(2)} MB`);
+    let cmd = ffmpeg(inputPath);
 
-    ffmpeg(inputPath)
-      .videoFilter("scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2,setsar=1")
-      .videoCodec("libx264")
-      .audioCodec("aac")
-      .outputOptions(["-r 30", "-ar 44100", "-ac 2", "-preset fast", "-crf 23", "-movflags +faststart"])
+    if (vf) cmd = cmd.videoFilter(vf);
+
+    cmd
+      .videoCodec(videoCodec)
+      .audioCodec(audioCodec)
+      .outputOptions(extraOpts)
       .on("stderr", line => {
         stderrLines.push(line);
-        if (/frame=|fps=|error|Error/i.test(line)) console.log("[FFmpeg stderr]", line);
+        // Always log progress lines + anything that looks like an error
+        if (/frame=|fps=|error|Error|invalid|corrupt|failed/i.test(line)) {
+          console.log("[FFmpeg stderr]", line);
+        }
       })
       .on("end", () => {
         const outMB = (fs.existsSync(outputPath) ? fs.statSync(outputPath).size : 0) / 1024 / 1024;
-        console.log(`[FFmpeg] ✅ normalize ${path.basename(outputPath)} — output: ${outMB.toFixed(2)} MB`);
+        console.log(`[FFmpeg] end — ${path.basename(outputPath)} ${outMB.toFixed(2)} MB`);
         if (outMB < 1) {
-          console.warn(`[FFmpeg] ⚠ normalize output < 1 MB. stderr:\n${stderrLines.slice(-20).join("\n")}`);
+          // Dump full stderr so we can see exactly what went wrong
+          console.error(`[FFmpeg] ⚠ output < 1 MB. Full stderr:\n${stderrLines.join("\n")}`);
         }
         resolve();
       })
       .on("error", err => {
-        console.error(`[FFmpeg] ❌ normalize ${path.basename(inputPath)}: ${err.message}\nstderr:\n${stderrLines.slice(-20).join("\n")}`);
+        console.error(`[FFmpeg] ❌ ${err.message}\nFull stderr:\n${stderrLines.join("\n")}`);
         reject(err);
       })
       .save(outputPath);
