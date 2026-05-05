@@ -2,7 +2,7 @@
   "name": "vouch-functions",
   "version": "1.0.0",
   "description": "Firebase Cloud Functions for Vouch video testimonial processing",
-  "engines": { "node": "20" },
+  "engines": { "node": "22" },
   "main": "index.js",
   "scripts": {
     "lint": "eslint ."
