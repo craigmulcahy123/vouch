@@ -108,9 +108,11 @@ exports.processTestimonial = onDocumentWritten(
       const bucket = storage.bucket();
       const processedVideoURLs = {};
 
-      // ── 5. Download source WebM files ────────────────────────────────────
+      // ── 5. Download source videos ────────────────────────────────────────
+      // Files are stored with a .webm extension but may be MP4 (e.g. iPhone).
+      // Format is detected from file headers after download, not from the extension.
       console.log(`[processTestimonial] downloading ${videoEntries.length} video(s)`);
-      const localWebms = {};
+      const localVideos = {};
 
       for (const [qIdx, url] of videoEntries) {
         const localPath = path.join(tmpDir, `${testimonialId}_q${qIdx}_src.webm`);
@@ -121,28 +123,28 @@ exports.processTestimonial = onDocumentWritten(
           if (dlSize < 1024) {
             console.warn(`[processTestimonial] ⚠ Q${qIdx} suspiciously small (${dlSize} bytes) — skipping`);
           } else {
-            localWebms[qIdx] = localPath;
+            localVideos[qIdx] = localPath;
           }
         } catch (e) {
           console.error(`[processTestimonial] ❌ download failed Q${qIdx}: ${e.message}`);
         }
       }
 
-      if (Object.keys(localWebms).length === 0) {
+      if (Object.keys(localVideos).length === 0) {
         throw new Error("All video downloads failed — nothing to process");
       }
 
-      // ── 6. Convert each WebM to MP4 ──────────────────────────────────────
+      // ── 6. Convert each video to MP4 ─────────────────────────────────────
       const convertedMp4s = {};
 
-      for (const [qIdx, webmPath] of Object.entries(localWebms)) {
+      for (const [qIdx, srcPath] of Object.entries(localVideos)) {
         const mp4Path = path.join(tmpDir, `${testimonialId}_q${qIdx}.mp4`);
         try {
-          await convertToMp4(webmPath, mp4Path);
+          await convertToMp4(srcPath, mp4Path);
           const outSize = fs.existsSync(mp4Path) ? fs.statSync(mp4Path).size : 0;
           console.log(`[processTestimonial] Q${qIdx} converted — ${(outSize / 1024 / 1024).toFixed(2)} MB`);
-          if (outSize < 1024 * 1024) {
-            console.error(`[processTestimonial] ❌ Q${qIdx} output < 1 MB — skipping`);
+          if (outSize < 100 * 1024) {
+            console.error(`[processTestimonial] ❌ Q${qIdx} output < 100 KB — skipping`);
           } else {
             convertedMp4s[qIdx] = mp4Path;
           }
@@ -172,8 +174,8 @@ exports.processTestimonial = onDocumentWritten(
           const uploadSize = fs.existsSync(outputPath) ? fs.statSync(outputPath).size : 0;
           console.log(`[processTestimonial] ${fmt.name} — ${(uploadSize / 1024 / 1024).toFixed(2)} MB`);
 
-          if (uploadSize < 1024 * 1024) {
-            console.error(`[processTestimonial] ❌ ${fmt.name} < 1 MB — skipping upload`);
+              if (uploadSize < 100 * 1024) {
+            console.error(`[processTestimonial] ❌ ${fmt.name} < 100 KB — skipping upload`);
             continue;
           }
 
@@ -216,7 +218,7 @@ exports.processTestimonial = onDocumentWritten(
       }
 
       // ── 9. Cleanup /tmp ──────────────────────────────────────────────────
-      for (const p of [...Object.values(localWebms), ...Object.values(convertedMp4s)]) {
+      for (const p of [...Object.values(localVideos), ...Object.values(convertedMp4s)]) {
         try { if (fs.existsSync(p)) fs.unlinkSync(p); } catch {}
       }
 
@@ -258,21 +260,77 @@ function downloadFile(url, destPath) {
 }
 
 /**
- * Convert a WebM to MP4 with simple libx264 encoding.
- * No seeking, no trimming, no filters.
- * Equivalent to: ffmpeg -i input.webm -c:v libx264 -preset fast -crf 23
- *                       -pix_fmt yuv420p -c:a aac -movflags +faststart output.mp4
+ * Detect the actual video container format from the first 12 bytes of the file.
+ * Returns { container: 'mp4'|'webm'|'unknown', brand: string|null }
+ *
+ * MP4/MOV/QuickTime:  bytes 4-7 == 'ftyp', bytes 8-11 == major_brand (e.g. 'iso5')
+ * WebM/Matroska:      bytes 0-3 == 0x1A 0x45 0xDF 0xA3 (EBML header)
+ */
+function detectVideoFormat(filePath) {
+  try {
+    const buf = Buffer.alloc(12);
+    const fd  = fs.openSync(filePath, "r");
+    fs.readSync(fd, buf, 0, 12, 0);
+    fs.closeSync(fd);
+
+    if (buf[0] === 0x1a && buf[1] === 0x45 && buf[2] === 0xdf && buf[3] === 0xa3) {
+      return { container: "webm", brand: null };
+    }
+    if (buf.slice(4, 8).toString("ascii") === "ftyp") {
+      const brand = buf.slice(8, 12).toString("ascii").replace(/\0/g, "").trim();
+      return { container: "mp4", brand };
+    }
+  } catch (e) {
+    console.warn(`[detectFormat] could not read headers: ${e.message}`);
+  }
+  return { container: "unknown", brand: null };
+}
+
+/**
+ * Convert any video file to a normalised MP4.
+ *
+ * iPhone files are stored with a .webm extension but are actually MP4/H.264
+ * recorded in portrait with 90° rotation metadata. We detect this from the
+ * file header (ftyp box → iso5 brand is the common iPhone major_brand) and
+ * apply transpose=1 to bake in the correct orientation, then scale+pad to
+ * 1920×1080 landscape.
+ *
+ * WebM / VP8 / VP9 files get a straight libx264 re-encode with no filter.
  */
 function convertToMp4(inputPath, outputPath) {
+  const fmt = detectVideoFormat(inputPath);
+
+  // iPhone MP4: any ftyp container (iso5, isom, mp42, avc1 …) recorded via
+  // MediaRecorder on iOS, stored with .webm extension but genuinely H.264.
+  const isIphoneMp4 = fmt.container === "mp4";
+
+  const srcMB = (fs.existsSync(inputPath) ? fs.statSync(inputPath).size : 0) / 1024 / 1024;
+  console.log(
+    `[FFmpeg] convert — ${path.basename(inputPath)} → ${path.basename(outputPath)} | ` +
+    `input: ${srcMB.toFixed(2)} MB | ` +
+    `detected: container=${fmt.container} brand=${fmt.brand ?? "n/a"} | ` +
+    `mode: ${isIphoneMp4 ? "iPhone MP4 (transpose+scale)" : "WebM (simple re-encode)"}`,
+  );
+
   return new Promise((resolve, reject) => {
     const stderrLines = [];
-    const srcMB = (fs.existsSync(inputPath) ? fs.statSync(inputPath).size : 0) / 1024 / 1024;
-    console.log(`[FFmpeg] convert — ${path.basename(inputPath)} → ${path.basename(outputPath)} | input: ${srcMB.toFixed(2)} MB`);
-
-    ffmpeg(inputPath)
+    let cmd = ffmpeg(inputPath)
       .videoCodec("libx264")
       .audioCodec("aac")
-      .outputOptions(["-preset fast", "-crf 23", "-pix_fmt yuv420p", "-movflags +faststart"])
+      .outputOptions(["-preset fast", "-crf 23", "-pix_fmt yuv420p", "-movflags +faststart"]);
+
+    if (isIphoneMp4) {
+      // transpose=1 rotates 90° clockwise to fix portrait recording stored without
+      // display-rotation metadata being honoured by all players. scale+pad ensures
+      // a clean 1920×1080 landscape output regardless of the original resolution.
+      cmd = cmd.videoFilter(
+        "transpose=1," +
+        "scale=1920:1080:force_original_aspect_ratio=decrease," +
+        "pad=1920:1080:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1",
+      );
+    }
+
+    cmd
       .on("stderr", line => {
         stderrLines.push(line);
         if (/frame=|fps=|error|Error|invalid|corrupt/i.test(line)) console.log("[FFmpeg stderr]", line);
@@ -280,8 +338,8 @@ function convertToMp4(inputPath, outputPath) {
       .on("end", () => {
         const outMB = (fs.existsSync(outputPath) ? fs.statSync(outputPath).size : 0) / 1024 / 1024;
         console.log(`[FFmpeg] ✅ convert ${path.basename(outputPath)} — output: ${outMB.toFixed(2)} MB`);
-        if (outMB < 1) {
-          console.error(`[FFmpeg] ❌ output < 1 MB. Full stderr:\n${stderrLines.join("\n")}`);
+        if (outMB * 1024 < 100) {
+          console.error(`[FFmpeg] ❌ output < 100 KB. Full stderr:\n${stderrLines.join("\n")}`);
         }
         resolve();
       })
