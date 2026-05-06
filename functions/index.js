@@ -5,6 +5,7 @@ const admin  = require("firebase-admin");
 const ffmpeg = require("fluent-ffmpeg");
 const ffmpegPath = require("@ffmpeg-installer/ffmpeg").path;
 const fetch  = require("node-fetch");
+const { Anthropic } = require("@anthropic-ai/sdk");
 const { Resend } = require("resend");
 const os   = require("os");
 const path = require("path");
@@ -16,6 +17,9 @@ ffmpeg.setFfmpegPath(ffmpegPath);
 const db      = admin.firestore();
 const storage = admin.storage();
 
+function getAnthropic() {
+  return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+}
 function getResend() {
   return new Resend(process.env.RESEND_API_KEY);
 }
@@ -93,9 +97,7 @@ exports.processTestimonial = onDocumentWritten(
 
       // ── 4. Handle text-only testimonial (no videos) ──────────────────────
       const videoURLs    = data.videoURLs || {};
-      const videoEntries = Object.entries(videoURLs)
-        .filter(([, url]) => url)
-        .sort(([a], [b]) => Number(a) - Number(b));
+      const videoEntries = Object.entries(videoURLs).filter(([, url]) => url);
 
       if (videoEntries.length === 0) {
         console.log("[processTestimonial] no videos — skipping video processing");
@@ -104,78 +106,110 @@ exports.processTestimonial = onDocumentWritten(
         return;
       }
 
-      const tmpDir = os.tmpdir();
+      const tmpDir    = os.tmpdir();
+      const anthropic = getAnthropic();
+
+      // ── 5. Download source videos ────────────────────────────────────────
+      console.log(`[processTestimonial] downloading ${videoEntries.length} video(s)`);
+      const localVideos = {};
+      for (const [qIdx, url] of videoEntries) {
+        const localPath = path.join(tmpDir, `${testimonialId}_q${qIdx}_src.webm`);
+        await downloadFile(url, localPath);
+        const dlSize = fs.existsSync(localPath) ? fs.statSync(localPath).size : 0;
+        localVideos[qIdx] = localPath;
+        console.log(`[processTestimonial] downloaded Q${qIdx} → ${(dlSize / 1024 / 1024).toFixed(2)} MB`);
+        if (dlSize < 1024) console.warn(`[processTestimonial] ⚠ Q${qIdx} suspiciously small: ${dlSize} bytes`);
+      }
+
+      // ── 6. Extract WAV audio + transcribe with timestamps ────────────────
+      const transcripts = {};
+
+      for (const [qIdx, localPath] of Object.entries(localVideos)) {
+        const wavPath = path.join(tmpDir, `${testimonialId}_q${qIdx}.wav`);
+        try {
+          await extractAudioWav(localPath, wavPath, 60);
+          const wavBuffer = fs.readFileSync(wavPath);
+          console.log(`[processTestimonial] WAV Q${qIdx}: ${(wavBuffer.length / 1024).toFixed(0)} KB`);
+
+          if (wavBuffer.length > 8 * 1024 * 1024) {
+            console.warn(`[processTestimonial] WAV too large for Q${qIdx}, using text answer`);
+            transcripts[qIdx] = data.answers?.[qIdx] || "";
+          } else {
+            const wavBase64 = wavBuffer.toString("base64");
+            const response = await anthropic.messages.create({
+              model: "claude-opus-4-6",
+              max_tokens: 1024,
+              messages: [{
+                role: "user",
+                content: [
+                  { type: "audio", source: { type: "base64", media_type: "audio/wav", data: wavBase64 } },
+                  { type: "text", text: "Transcribe this audio exactly. Return only the transcript with timestamps in format [0:00] text" },
+                ],
+              }],
+            });
+            transcripts[qIdx] = response.content[0]?.text || data.answers?.[qIdx] || "";
+            console.log(`[processTestimonial] transcribed Q${qIdx}: "${transcripts[qIdx].substring(0, 100)}..."`);
+          }
+        } catch (e) {
+          console.warn(`[processTestimonial] transcription failed Q${qIdx}:`, e.message);
+          transcripts[qIdx] = data.answers?.[qIdx] || "";
+        } finally {
+          try { fs.unlinkSync(wavPath); } catch {}
+        }
+      }
+
+      // ── 7. Generate polished quote from transcript ────────────────────────
+      const fullTranscript = Object.entries(transcripts)
+        .filter(([, t]) => t)
+        .map(([i, t]) => `Question ${Number(i) + 1}:\n${t}`)
+        .join("\n\n");
+
+      let generatedQuote = data.quote && data.quote !== "Processing transcript..." ? data.quote : "";
+      if (fullTranscript.trim()) {
+        try {
+          const quoteResponse = await anthropic.messages.create({
+            model: "claude-opus-4-6",
+            max_tokens: 200,
+            messages: [{
+              role: "user",
+              content: `Here is a transcript from a video testimonial. Extract the most compelling quote or create a short polished testimonial from what they said. Return just the quote, 1-3 sentences, in first person, no quotation marks needed.\n\n${fullTranscript}`,
+            }],
+          });
+          generatedQuote = quoteResponse.content[0]?.text?.trim() || generatedQuote;
+          console.log(`[processTestimonial] generated quote: "${generatedQuote.substring(0, 100)}..."`);
+        } catch (e) {
+          console.warn("[processTestimonial] quote generation failed:", e.message);
+        }
+      }
+
       const bucket = storage.bucket();
       const processedVideoURLs = {};
 
-      // ── 5. Download source videos ────────────────────────────────────────
-      // Files are stored with a .webm extension but may be MP4 (e.g. iPhone).
-      // Format is detected from file headers after download, not from the extension.
-      console.log(`[processTestimonial] downloading ${videoEntries.length} video(s)`);
-      const localVideos = {};
+      // ── 8a. Render highlight formats — q0 resized, full length, no overlays ─
+      // Using the first question video as the source for all three aspect ratios.
+      // No seeking, no trimming, no drawtext — just a simple scale+pad conversion.
+      const q0Path = localVideos["0"] ?? Object.values(localVideos)[0];
 
-      for (const [qIdx, url] of videoEntries) {
-        const localPath = path.join(tmpDir, `${testimonialId}_q${qIdx}_src.webm`);
-        try {
-          await downloadFile(url, localPath);
-          const dlSize = fs.existsSync(localPath) ? fs.statSync(localPath).size : 0;
-          console.log(`[processTestimonial] downloaded Q${qIdx} — ${(dlSize / 1024 / 1024).toFixed(2)} MB`);
-          if (dlSize < 1024) {
-            console.warn(`[processTestimonial] ⚠ Q${qIdx} suspiciously small (${dlSize} bytes) — skipping`);
-          } else {
-            localVideos[qIdx] = localPath;
-          }
-        } catch (e) {
-          console.error(`[processTestimonial] ❌ download failed Q${qIdx}: ${e.message}`);
-        }
-      }
-
-      if (Object.keys(localVideos).length === 0) {
-        throw new Error("All video downloads failed — nothing to process");
-      }
-
-      // ── 6. Convert each video to MP4 ─────────────────────────────────────
-      const convertedMp4s = {};
-
-      for (const [qIdx, srcPath] of Object.entries(localVideos)) {
-        const mp4Path = path.join(tmpDir, `${testimonialId}_q${qIdx}.mp4`);
-        try {
-          await convertToMp4(srcPath, mp4Path);
-          const outSize = fs.existsSync(mp4Path) ? fs.statSync(mp4Path).size : 0;
-          console.log(`[processTestimonial] Q${qIdx} converted — ${(outSize / 1024 / 1024).toFixed(2)} MB`);
-          if (outSize < 100 * 1024) {
-            console.error(`[processTestimonial] ❌ Q${qIdx} output < 100 KB — skipping`);
-          } else {
-            convertedMp4s[qIdx] = mp4Path;
-          }
-        } catch (e) {
-          console.error(`[processTestimonial] ❌ convert failed Q${qIdx}: ${e.message}`);
-        }
-      }
-
-      if (Object.keys(convertedMp4s).length === 0) {
-        throw new Error("All conversions failed — nothing to upload");
-      }
-
-      // ── 7. Resize q0 to landscape / portrait / square ────────────────────
-      const q0Path = convertedMp4s["0"] ?? Object.values(convertedMp4s)[0];
-
-      const outputFormats = [
+      const highlightFormats = [
         { name: "landscape", width: 1920, height: 1080 },
         { name: "portrait",  width: 1080, height: 1920 },
         { name: "square",    width: 1080, height: 1080 },
       ];
 
-      for (const fmt of outputFormats) {
+      for (const fmt of highlightFormats) {
         const outputPath = path.join(tmpDir, `${testimonialId}_${fmt.name}.mp4`);
+        console.log(`[processTestimonial] rendering ${fmt.name} (${fmt.width}x${fmt.height})`);
+
         try {
-          await resizeVideo({ inputPath: q0Path, outputPath, width: fmt.width, height: fmt.height });
+          await renderResized({ inputPath: q0Path, outputPath, width: fmt.width, height: fmt.height });
 
           const uploadSize = fs.existsSync(outputPath) ? fs.statSync(outputPath).size : 0;
-          console.log(`[processTestimonial] ${fmt.name} — ${(uploadSize / 1024 / 1024).toFixed(2)} MB`);
+          const uploadMB = uploadSize / 1024 / 1024;
+          console.log(`[processTestimonial] ${fmt.name}: output ${uploadMB.toFixed(2)} MB`);
 
-              if (uploadSize < 100 * 1024) {
-            console.error(`[processTestimonial] ❌ ${fmt.name} < 100 KB — skipping upload`);
+          if (uploadSize < 1024 * 1024) {
+            console.error(`[processTestimonial] ❌ ${fmt.name} output < 1 MB — skipping upload (likely corrupt)`);
+            try { fs.unlinkSync(outputPath); } catch {}
             continue;
           }
 
@@ -191,46 +225,61 @@ exports.processTestimonial = onDocumentWritten(
           };
           console.log(`[processTestimonial] uploaded ${fmt.name}`);
         } catch (e) {
-          console.error(`[processTestimonial] ❌ ${fmt.name} failed: ${e.message}`);
+          console.warn(`[processTestimonial] ${fmt.name} render failed:`, e.message);
         } finally {
           try { fs.unlinkSync(outputPath); } catch {}
         }
       }
 
-      // ── 8. Upload individual question MP4s ───────────────────────────────
-      for (const [qIdx, mp4Path] of Object.entries(convertedMp4s)) {
+      // ── 8b. Convert each raw question video to full MP4 — no trimming ────
+      for (const [qIdx, localPath] of Object.entries(localVideos)) {
+        const outputPath = path.join(tmpDir, `${testimonialId}_q${qIdx}.mp4`);
+        console.log(`[processTestimonial] converting full Q${qIdx} to MP4`);
         try {
-          const uploadSize = fs.existsSync(mp4Path) ? fs.statSync(mp4Path).size : 0;
-          const storagePath = `users/${userId}/processed/${testimonialId}/q${qIdx}.mp4`;
-          await bucket.upload(mp4Path, {
-            destination: storagePath,
-            metadata: { contentType: "video/mp4", cacheControl: "public, max-age=31536000" },
-            public: true,
-          });
-          processedVideoURLs[`q${qIdx}`] = {
-            url: `https://storage.googleapis.com/${bucket.name}/${storagePath}`,
-            storagePath,
-          };
-          console.log(`[processTestimonial] uploaded q${qIdx}.mp4 — ${(uploadSize / 1024 / 1024).toFixed(2)} MB`);
+          await convertFullVideo(localPath, outputPath);
+          const uploadSize = fs.existsSync(outputPath) ? fs.statSync(outputPath).size : 0;
+          const uploadMB = uploadSize / 1024 / 1024;
+          console.log(`[processTestimonial] q${qIdx}.mp4: output ${uploadMB.toFixed(2)} MB`);
+
+          if (uploadSize < 1024 * 1024) {
+            console.error(`[processTestimonial] ❌ q${qIdx}.mp4 output < 1 MB — skipping upload (likely corrupt)`);
+          } else {
+            const storagePath = `users/${userId}/processed/${testimonialId}/q${qIdx}.mp4`;
+            await bucket.upload(outputPath, {
+              destination: storagePath,
+              metadata: { contentType: "video/mp4", cacheControl: "public, max-age=31536000" },
+              public: true,
+            });
+            processedVideoURLs[`q${qIdx}`] = {
+              url: `https://storage.googleapis.com/${bucket.name}/${storagePath}`,
+              storagePath,
+            };
+            console.log(`[processTestimonial] uploaded q${qIdx}.mp4`);
+          }
         } catch (e) {
-          console.error(`[processTestimonial] ❌ q${qIdx}.mp4 upload failed: ${e.message}`);
+          console.warn(`[processTestimonial] Q${qIdx} full convert failed:`, e.message);
+        } finally {
+          try { fs.unlinkSync(outputPath); } catch {}
         }
       }
 
-      // ── 9. Cleanup /tmp ──────────────────────────────────────────────────
-      for (const p of [...Object.values(localVideos), ...Object.values(convertedMp4s)]) {
-        try { if (fs.existsSync(p)) fs.unlinkSync(p); } catch {}
+      // Clean up downloaded WebM files from /tmp (originals in Firebase Storage are kept)
+      for (const p of Object.values(localVideos)) {
+        try { fs.unlinkSync(p); } catch {}
       }
 
-      // ── 10. Update Firestore ─────────────────────────────────────────────
+      // ── 9. Update Firestore ──────────────────────────────────────────────
       await testimonialRef.update({
         status: "processed",
         processedAt: Date.now(),
         processedVideoURLs,
+        transcripts,
+        transcript: fullTranscript,
+        ...(generatedQuote ? { quote: generatedQuote } : {}),
       });
-      console.log(`[processTestimonial] done — uploaded: ${Object.keys(processedVideoURLs).join(", ")}`);
+      console.log("[processTestimonial] Firestore updated — status: processed");
 
-      // ── 11. Send completion emails ───────────────────────────────────────
+      // ── 10. Send completion emails ───────────────────────────────────────
       await sendCompletionEmails({ ownerEmail, clientEmail, data, companyName, processedVideoURLs });
 
     } catch (err) {
@@ -259,92 +308,57 @@ function downloadFile(url, destPath) {
   });
 }
 
-/**
- * Detect the actual video container format from the first 12 bytes of the file.
- * Returns { container: 'mp4'|'webm'|'unknown', brand: string|null }
- *
- * MP4/MOV/QuickTime:  bytes 4-7 == 'ftyp', bytes 8-11 == major_brand (e.g. 'iso5')
- * WebM/Matroska:      bytes 0-3 == 0x1A 0x45 0xDF 0xA3 (EBML header)
- */
-function detectVideoFormat(filePath) {
-  try {
-    const buf = Buffer.alloc(12);
-    const fd  = fs.openSync(filePath, "r");
-    fs.readSync(fd, buf, 0, 12, 0);
-    fs.closeSync(fd);
-
-    if (buf[0] === 0x1a && buf[1] === 0x45 && buf[2] === 0xdf && buf[3] === 0xa3) {
-      return { container: "webm", brand: null };
-    }
-    if (buf.slice(4, 8).toString("ascii") === "ftyp") {
-      const brand = buf.slice(8, 12).toString("ascii").replace(/\0/g, "").trim();
-      return { container: "mp4", brand };
-    }
-  } catch (e) {
-    console.warn(`[detectFormat] could not read headers: ${e.message}`);
-  }
-  return { container: "unknown", brand: null };
+/** Extract mono 16 kHz WAV audio — optimal for speech transcription. */
+function extractAudioWav(inputPath, outputPath, maxSeconds = 60) {
+  return new Promise((resolve, reject) => {
+    ffmpeg(inputPath)
+      .noVideo()
+      .audioCodec("pcm_s16le")
+      .audioFrequency(16000)
+      .audioChannels(1)
+      .outputOptions([`-t ${maxSeconds}`])
+      .on("end", resolve)
+      .on("error", reject)
+      .save(outputPath);
+  });
 }
 
 /**
- * Convert any video file to a normalised MP4.
- *
- * iPhone files are stored with a .webm extension but are actually MP4/H.264
- * recorded in portrait with 90° rotation metadata. We detect this from the
- * file header (ftyp box → iso5 brand is the common iPhone major_brand) and
- * apply transpose=1 to bake in the correct orientation, then scale+pad to
- * 1920×1080 landscape.
- *
- * WebM / VP8 / VP9 files get a straight libx264 re-encode with no filter.
+ * Resize a full video to target dimensions.
+ * No seeking, no trimming, no text overlays — plain scale+pad conversion.
+ * Logs input and output sizes in MB; the caller skips upload if output < 1 MB.
  */
-function convertToMp4(inputPath, outputPath) {
-  const fmt = detectVideoFormat(inputPath);
-
-  // iPhone MP4: any ftyp container (iso5, isom, mp42, avc1 …) recorded via
-  // MediaRecorder on iOS, stored with .webm extension but genuinely H.264.
-  const isIphoneMp4 = fmt.container === "mp4";
-
-  const srcMB = (fs.existsSync(inputPath) ? fs.statSync(inputPath).size : 0) / 1024 / 1024;
-  console.log(
-    `[FFmpeg] convert — ${path.basename(inputPath)} → ${path.basename(outputPath)} | ` +
-    `input: ${srcMB.toFixed(2)} MB | ` +
-    `detected: container=${fmt.container} brand=${fmt.brand ?? "n/a"} | ` +
-    `mode: ${isIphoneMp4 ? "iPhone MP4 (transpose+scale)" : "WebM (simple re-encode)"}`,
-  );
-
+function renderResized({ inputPath, outputPath, width, height }) {
   return new Promise((resolve, reject) => {
     const stderrLines = [];
-    let cmd = ffmpeg(inputPath)
+    const srcSize = fs.existsSync(inputPath) ? fs.statSync(inputPath).size : 0;
+    console.log(`[FFmpeg] resize — ${path.basename(outputPath)} | ${width}x${height} | input: ${(srcSize / 1024 / 1024).toFixed(2)} MB`);
+
+    const vf = [
+      `scale=${width}:${height}:force_original_aspect_ratio=decrease`,
+      `pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black`,
+    ].join(",");
+
+    ffmpeg(inputPath)
+      .videoFilter(vf)
       .videoCodec("libx264")
       .audioCodec("aac")
-      .outputOptions(["-preset fast", "-crf 23", "-pix_fmt yuv420p", "-movflags +faststart"]);
-
-    if (isIphoneMp4) {
-      // transpose=1 rotates 90° clockwise to fix portrait recording stored without
-      // display-rotation metadata being honoured by all players. scale+pad ensures
-      // a clean 1920×1080 landscape output regardless of the original resolution.
-      cmd = cmd.videoFilter(
-        "transpose=1," +
-        "scale=1920:1080:force_original_aspect_ratio=decrease," +
-        "pad=1920:1080:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1",
-      );
-    }
-
-    cmd
+      .outputOptions(["-crf 23", "-preset fast", "-movflags +faststart"])
       .on("stderr", line => {
         stderrLines.push(line);
-        if (/frame=|fps=|error|Error|invalid|corrupt/i.test(line)) console.log("[FFmpeg stderr]", line);
+        if (/frame=|fps=|error|Error/i.test(line)) console.log("[FFmpeg stderr]", line);
       })
       .on("end", () => {
-        const outMB = (fs.existsSync(outputPath) ? fs.statSync(outputPath).size : 0) / 1024 / 1024;
-        console.log(`[FFmpeg] ✅ convert ${path.basename(outputPath)} — output: ${outMB.toFixed(2)} MB`);
-        if (outMB * 1024 < 100) {
-          console.error(`[FFmpeg] ❌ output < 100 KB. Full stderr:\n${stderrLines.join("\n")}`);
+        const outSize = fs.existsSync(outputPath) ? fs.statSync(outputPath).size : 0;
+        const outMB = outSize / 1024 / 1024;
+        console.log(`[FFmpeg] ✅ ${path.basename(outputPath)} — output: ${outMB.toFixed(2)} MB`);
+        if (outSize < 1024 * 1024) {
+          console.error(`[FFmpeg] ❌ output < 1 MB — likely corrupt. stderr:\n${stderrLines.join("\n")}`);
         }
         resolve();
       })
       .on("error", err => {
-        console.error(`[FFmpeg] ❌ convert ${path.basename(inputPath)}: ${err.message}\nFull stderr:\n${stderrLines.join("\n")}`);
+        console.error(`[FFmpeg] ❌ ${err.message}\nstderr:\n${stderrLines.join("\n")}`);
         reject(err);
       })
       .save(outputPath);
@@ -352,37 +366,34 @@ function convertToMp4(inputPath, outputPath) {
 }
 
 /**
- * Resize an MP4 to target dimensions with scale+pad+setsar.
- * Equivalent to: ffmpeg -i input.mp4 -vf "scale=W:H:force_original_aspect_ratio=decrease,
- *                pad=W:H:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1"
- *                -c:v libx264 -preset fast -crf 23 -pix_fmt yuv420p -c:a aac
- *                -movflags +faststart output.mp4
+ * Convert a full WebM to MP4 without any seeking or trimming.
+ * Logs input and output sizes in MB; the caller skips upload if output < 1 MB.
  */
-function resizeVideo({ inputPath, outputPath, width, height }) {
+function convertFullVideo(inputPath, outputPath) {
   return new Promise((resolve, reject) => {
     const stderrLines = [];
-    const srcMB = (fs.existsSync(inputPath) ? fs.statSync(inputPath).size : 0) / 1024 / 1024;
-    console.log(`[FFmpeg] resize — ${path.basename(outputPath)} | ${width}x${height} | input: ${srcMB.toFixed(2)} MB`);
+    const srcSize = fs.existsSync(inputPath) ? fs.statSync(inputPath).size : 0;
+    console.log(`[FFmpeg] full convert — ${path.basename(outputPath)} | input: ${(srcSize / 1024 / 1024).toFixed(2)} MB`);
 
     ffmpeg(inputPath)
-      .videoFilter(`scale=${width}:${height}:force_original_aspect_ratio=decrease,pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1`)
       .videoCodec("libx264")
       .audioCodec("aac")
-      .outputOptions(["-preset fast", "-crf 23", "-pix_fmt yuv420p", "-movflags +faststart"])
+      .outputOptions(["-crf 23", "-preset fast", "-movflags +faststart"])
       .on("stderr", line => {
         stderrLines.push(line);
-        if (/frame=|fps=|error|Error|invalid|corrupt/i.test(line)) console.log("[FFmpeg stderr]", line);
+        if (/frame=|fps=|error|Error/i.test(line)) console.log("[FFmpeg stderr]", line);
       })
       .on("end", () => {
-        const outMB = (fs.existsSync(outputPath) ? fs.statSync(outputPath).size : 0) / 1024 / 1024;
-        console.log(`[FFmpeg] ✅ resize ${path.basename(outputPath)} — output: ${outMB.toFixed(2)} MB`);
-        if (outMB < 1) {
-          console.error(`[FFmpeg] ❌ resize output < 1 MB. Full stderr:\n${stderrLines.join("\n")}`);
+        const outSize = fs.existsSync(outputPath) ? fs.statSync(outputPath).size : 0;
+        const outMB = outSize / 1024 / 1024;
+        console.log(`[FFmpeg] ✅ ${path.basename(outputPath)} — output: ${outMB.toFixed(2)} MB`);
+        if (outSize < 1024 * 1024) {
+          console.error(`[FFmpeg] ❌ output < 1 MB — likely corrupt. stderr:\n${stderrLines.join("\n")}`);
         }
         resolve();
       })
       .on("error", err => {
-        console.error(`[FFmpeg] ❌ resize ${path.basename(outputPath)}: ${err.message}\nFull stderr:\n${stderrLines.join("\n")}`);
+        console.error(`[FFmpeg] ❌ full convert: ${err.message}\nstderr:\n${stderrLines.join("\n")}`);
         reject(err);
       })
       .save(outputPath);
@@ -397,6 +408,7 @@ async function sendCompletionEmails({ ownerEmail, clientEmail, data, companyName
   const clientName  = data.clientName || "Your client";
   const displayComp = companyName || "your company";
 
+  // Only show the three highlight formats in the email (not the raw Q files)
   const highlightFormats = ["landscape", "portrait", "square"];
   const downloadButtons = Object.entries(processedVideoURLs)
     .filter(([fmt]) => highlightFormats.includes(fmt))
