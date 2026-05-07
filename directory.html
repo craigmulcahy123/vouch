@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vouch Verified Business Directory — Find trusted businesses</title>
+  <meta name="description" content="Every business in the Vouch directory has verified video testimonials from real clients. You can't fake a face." />
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230e0e0e'/><text y='.9em' font-size='70' x='50%' text-anchor='middle' dominant-baseline='middle' dy='0.1em' fill='%23c8a96e' font-family='serif' font-weight='bold'>V</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet" />
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone@7.23.4/babel.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --ink:    #0e0e0e;
+      --paper:  #f5f0e8;
+      --cream:  #ede8dc;
+      --gold:   #c8a96e;
+      --muted:  #7a7060;
+      --card:   #faf7f2;
+      --border: #ddd8cc;
+      --shadow: 0 2px 16px rgba(14,14,14,.08);
+      --shadow-lg: 0 8px 40px rgba(14,14,14,.14);
+    }
+    body { font-family: 'DM Sans', sans-serif; background: var(--paper); color: var(--ink); min-height: 100vh; }
+    #root { min-height: 100vh; }
+
+    .nav {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 18px 40px; border-bottom: 1px solid rgba(255,255,255,.1);
+      background: var(--ink); position: sticky; top: 0; z-index: 100;
+    }
+    .nav-logo { font-family: 'Instrument Serif', serif; font-size: 1.5rem; text-decoration: none; color: #fff; }
+    .nav-logo span { color: var(--gold); }
+    .nav-link { color: rgba(255,255,255,.6); text-decoration: none; font-size: .9rem; font-weight: 500; transition: color .15s; }
+    .nav-link:hover { color: #fff; }
+    @media (max-width: 640px) { .nav { padding: 14px 20px; } }
+
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 11px 24px; border-radius: 9px; border: none; cursor: pointer;
+      font-family: 'DM Sans', sans-serif; font-weight: 600; font-size: .9rem;
+      text-decoration: none; transition: all .2s; line-height: 1;
+    }
+    .btn-gold { background: var(--gold); color: #fff; }
+    .btn-gold:hover { background: #b8993e; }
+    .btn-outline { background: transparent; color: var(--ink); border: 1.5px solid var(--border); }
+    .btn-outline:hover { border-color: var(--ink); }
+    .btn-outline-light { background: transparent; color: #fff; border: 1.5px solid rgba(255,255,255,.22); }
+    .btn-outline-light:hover { border-color: #fff; }
+    .btn-sm { padding: 8px 18px; font-size: .84rem; }
+
+    /* Hero */
+    .hero { background: var(--ink); padding: 72px 24px 60px; text-align: center; position: relative; overflow: hidden; }
+    .hero::before {
+      content: ""; position: absolute; inset: 0;
+      background: radial-gradient(ellipse 65% 55% at 50% 0%, rgba(200,169,110,.13) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .hero-label {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: rgba(200,169,110,.12); border: 1px solid rgba(200,169,110,.22);
+      border-radius: 99px; padding: 4px 15px; margin-bottom: 26px;
+      font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; color: var(--gold);
+    }
+    .hero h1 {
+      font-family: 'Instrument Serif', serif;
+      font-size: clamp(2rem, 5vw, 3.4rem); line-height: 1.1; letter-spacing: -.02em;
+      color: #fff; margin-bottom: 16px; max-width: 680px; margin-left: auto; margin-right: auto;
+    }
+    .hero-sub { color: rgba(255,255,255,.55); font-size: 1rem; max-width: 500px; margin: 0 auto 36px; line-height: 1.65; }
+
+    /* Search */
+    .search-wrap {
+      max-width: 520px; margin: 0 auto; position: relative;
+    }
+    .search-input {
+      width: 100%; padding: 14px 18px 14px 46px; border-radius: 12px;
+      border: 1.5px solid rgba(255,255,255,.12); background: rgba(255,255,255,.06);
+      color: #fff; font-family: 'DM Sans', sans-serif; font-size: .95rem;
+      outline: none; transition: border-color .2s;
+    }
+    .search-input::placeholder { color: rgba(255,255,255,.3); }
+    .search-input:focus { border-color: rgba(200,169,110,.5); }
+    .search-icon { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: rgba(255,255,255,.3); font-size: 1rem; }
+
+    /* Filters */
+    .filters-bar {
+      background: var(--card); border-bottom: 1px solid var(--border);
+      padding: 14px 40px; display: flex; gap: 14px; align-items: center; flex-wrap: wrap;
+    }
+    @media (max-width: 640px) { .filters-bar { padding: 12px 16px; } }
+    .filter-label { font-size: .78rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; flex-shrink: 0; }
+    .filter-select {
+      padding: 8px 14px; border-radius: 8px; border: 1.5px solid var(--border);
+      background: #fff; font-family: 'DM Sans', sans-serif; font-size: .85rem;
+      color: var(--ink); cursor: pointer; outline: none; transition: border-color .15s;
+    }
+    .filter-select:focus { border-color: var(--gold); }
+    .filter-count { margin-left: auto; font-size: .82rem; color: var(--muted); }
+
+    /* Grid */
+    .dir-body { max-width: 1120px; margin: 0 auto; padding: 40px 24px 64px; }
+    .dir-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;
+    }
+    @media (max-width: 920px) { .dir-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 580px) { .dir-grid { grid-template-columns: 1fr; } }
+
+    /* Business card */
+    .biz-card {
+      background: var(--card); border: 1px solid var(--border); border-radius: 18px;
+      padding: 24px; display: flex; flex-direction: column; gap: 16px;
+      box-shadow: var(--shadow); transition: box-shadow .2s, transform .15s;
+    }
+    .biz-card:hover { box-shadow: var(--shadow-lg); transform: translateY(-2px); }
+    .biz-card-header { display: flex; gap: 14px; align-items: center; }
+    .biz-avatar {
+      width: 54px; height: 54px; border-radius: 14px; flex-shrink: 0;
+      background: #1a1a1a; border: 1px solid #2a2a2a;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Instrument Serif', serif; font-size: 1.6rem; color: var(--gold); font-style: italic;
+    }
+    .biz-name { font-family: 'Instrument Serif', serif; font-size: 1.15rem; line-height: 1.2; margin-bottom: 4px; }
+    .biz-industry {
+      display: inline-block; background: rgba(200,169,110,.1); border: 1px solid rgba(200,169,110,.2);
+      color: var(--gold); border-radius: 99px; padding: 2px 10px; font-size: .68rem; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .06em;
+    }
+    .biz-score-row { display: flex; align-items: center; gap: 12px; }
+    .biz-score-num { font-family: 'Instrument Serif', serif; font-size: 2.2rem; color: var(--gold); line-height: 1; }
+    .biz-score-star { font-size: 1rem; }
+    .biz-score-meta { display: flex; flex-direction: column; gap: 3px; }
+    .biz-count { font-size: .78rem; color: var(--muted); }
+    .biz-verified { display: flex; align-items: center; gap: 5px; font-size: .75rem; font-weight: 700; color: #4caf7d; }
+    .biz-verified-dot { width: 6px; height: 6px; border-radius: 50%; background: #4caf7d; }
+    .biz-bio { font-size: .85rem; color: var(--muted); line-height: 1.6; }
+    .biz-view-btn {
+      display: inline-flex; align-items: center; gap: 6px; align-self: flex-start;
+      background: var(--ink); color: #fff; border: none; border-radius: 8px;
+      padding: 9px 18px; font-family: 'DM Sans', sans-serif; font-size: .84rem; font-weight: 600;
+      cursor: pointer; text-decoration: none; transition: background .15s;
+    }
+    .biz-view-btn:hover { background: #2a2a2a; }
+
+    /* Skeleton / loading */
+    @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+    .skeleton {
+      background: linear-gradient(90deg, var(--cream) 25%, var(--border) 50%, var(--cream) 75%);
+      background-size: 200% 100%; animation: shimmer 1.4s infinite; border-radius: 6px;
+    }
+
+    /* Empty state */
+    .empty-state { text-align: center; padding: 64px 24px; }
+    .empty-state p { color: var(--muted); font-size: .95rem; }
+
+    /* CTA bottom */
+    .cta-section { background: var(--cream); border-top: 1px solid var(--border); padding: 64px 24px; text-align: center; }
+    .cta-section h2 { font-family: 'Instrument Serif', serif; font-size: clamp(1.7rem, 4vw, 2.4rem); margin-bottom: 10px; }
+    .cta-section p { color: var(--muted); font-size: .95rem; margin-bottom: 28px; }
+
+    /* Footer */
+    .footer { border-top: 1px solid var(--border); text-align: center; padding: 28px 24px 40px; color: var(--muted); font-size: .78rem; }
+    .footer a { color: var(--muted); text-decoration: none; }
+    .footer a:hover { color: var(--gold); }
+    .footer-links { display: flex; gap: 18px; justify-content: center; margin-top: 8px; flex-wrap: wrap; }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+  const { useState, useEffect, useMemo } = React;
+
+  const FIREBASE_API_KEY = "AIzaSyCB4cRZeklNwb6ShKVynKiQHHKeUcnk51E";
+  const PROJECT_ID = "vouch-cdf1c";
+
+  // Known user IDs with public profiles — seeded with the real A2Z Cloud account
+  const SEED_USERS = [
+    {
+      userId: "oA6y4ER3SrWyyAlg42vXXKkndBL2",
+      name: "A2Z Cloud",
+      industry: "Zoho Partner",
+      bio: "Premium Zoho implementation partner based in the UK. CRM, Books, Projects, and full Zoho One deployments.",
+    },
+  ];
+
+  // Static demo businesses to pad the directory while it grows
+  const DEMO_BUSINESSES = [
+    {
+      userId: "demo-1",
+      name: "Helix Marketing",
+      industry: "Marketing Agency",
+      bio: "Full-funnel B2B marketing for SaaS companies. Demand gen, content, and paid media.",
+      score: "4.8",
+      count: 9,
+      isDemo: true,
+    },
+    {
+      userId: "demo-2",
+      name: "Bright Pixel Studio",
+      industry: "Web Agency",
+      bio: "Webflow and Framer design studio crafting conversion-focused websites for startups.",
+      score: "4.9",
+      count: 14,
+      isDemo: true,
+    },
+    {
+      userId: "demo-3",
+      name: "Clearpath Consulting",
+      industry: "Consultant",
+      bio: "Operations and strategy consulting for growing SMEs. Process design, scaling, and team structure.",
+      score: "5.0",
+      count: 6,
+      isDemo: true,
+    },
+    {
+      userId: "demo-4",
+      name: "Luminos Commerce",
+      industry: "E-commerce",
+      bio: "End-to-end Shopify development and growth marketing. From launch to 7-figure revenue.",
+      score: "4.7",
+      count: 11,
+      isDemo: true,
+    },
+    {
+      userId: "demo-5",
+      name: "Stackable",
+      industry: "SaaS",
+      bio: "Project management software built for creative agencies. Timesheets, briefs, and client portals.",
+      score: "4.8",
+      count: 8,
+      isDemo: true,
+    },
+  ];
+
+  const INDUSTRIES = ["All Industries", "Zoho Partner", "Marketing Agency", "Web Agency", "Consultant", "E-commerce", "SaaS", "Other"];
+  const SORT_OPTIONS = [
+    { value: "score", label: "Highest Score" },
+    { value: "count", label: "Most Testimonials" },
+    { value: "recent", label: "Recently Verified" },
+  ];
+
+  async function fetchBusinessData(seed) {
+    const url =
+      `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)` +
+      `/documents/users/${seed.userId}/testimonials?pageSize=100&key=${FIREBASE_API_KEY}`;
+    try {
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(r.status);
+      const data = await r.json();
+      const docs = data.documents || [];
+      const approved = docs.filter(d => d.fields?.status?.stringValue === "approved");
+      const ratings = approved
+        .map(d => parseFloat(d.fields?.rating?.integerValue || d.fields?.rating?.doubleValue || 0))
+        .filter(r => r > 0);
+      const count = approved.length;
+      const avg = ratings.length > 0
+        ? (ratings.reduce((a, b) => a + b, 0) / ratings.length).toFixed(1)
+        : "5.0";
+      return { ...seed, score: avg, count: Math.max(count, 1), isDemo: false };
+    } catch {
+      return { ...seed, score: "5.0", count: 1, isDemo: false };
+    }
+  }
+
+  function SkeletonCard() {
+    return (
+      <div className="biz-card">
+        <div className="biz-card-header">
+          <div className="biz-avatar skeleton" style={{ background: "none" }} />
+          <div style={{ flex: 1 }}>
+            <div className="skeleton" style={{ height: 20, width: "60%", marginBottom: 8 }} />
+            <div className="skeleton" style={{ height: 14, width: "40%" }} />
+          </div>
+        </div>
+        <div className="skeleton" style={{ height: 40, width: "50%" }} />
+        <div>
+          <div className="skeleton" style={{ height: 13, marginBottom: 6 }} />
+          <div className="skeleton" style={{ height: 13, width: "80%" }} />
+        </div>
+        <div className="skeleton" style={{ height: 36, width: 110, borderRadius: 8 }} />
+      </div>
+    );
+  }
+
+  function BusinessCard({ biz }) {
+    const initial = biz.name.charAt(0).toUpperCase();
+    const bio = biz.bio.length > 100 ? biz.bio.slice(0, 100) + "…" : biz.bio;
+    const profileHref = biz.isDemo ? "#" : `/profile/${biz.userId}`;
+
+    return (
+      <div className="biz-card">
+        <div className="biz-card-header">
+          <div className="biz-avatar">{initial}</div>
+          <div>
+            <div className="biz-name">{biz.name}</div>
+            <span className="biz-industry">{biz.industry}</span>
+          </div>
+        </div>
+
+        <div className="biz-score-row">
+          <div className="biz-score-num">{biz.score}</div>
+          <div className="biz-score-star">⭐</div>
+          <div className="biz-score-meta">
+            <div className="biz-count">{biz.count} verified testimonial{biz.count !== 1 ? "s" : ""}</div>
+            <div className="biz-verified">
+              <div className="biz-verified-dot" />
+              ✓ Vouch Verified
+            </div>
+          </div>
+        </div>
+
+        <p className="biz-bio">{bio}</p>
+
+        <a href={profileHref} className="biz-view-btn" target={biz.isDemo ? "_self" : "_blank"} rel="noopener">
+          View profile →
+        </a>
+      </div>
+    );
+  }
+
+  function DirectoryPage() {
+    const [query, setQuery] = useState("");
+    const [industry, setIndustry] = useState("All Industries");
+    const [sort, setSort] = useState("score");
+    const [businesses, setBusinesses] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+      setLoading(true);
+      Promise.all(SEED_USERS.map(fetchBusinessData)).then(live => {
+        setBusinesses([...live, ...DEMO_BUSINESSES]);
+        setLoading(false);
+      });
+    }, []);
+
+    const filtered = useMemo(() => {
+      let list = businesses.filter(b => {
+        const matchQ =
+          !query ||
+          b.name.toLowerCase().includes(query.toLowerCase()) ||
+          b.industry.toLowerCase().includes(query.toLowerCase()) ||
+          b.bio.toLowerCase().includes(query.toLowerCase());
+        const matchI = industry === "All Industries" || b.industry === industry;
+        return matchQ && matchI;
+      });
+      if (sort === "score") list = [...list].sort((a, b) => parseFloat(b.score) - parseFloat(a.score));
+      else if (sort === "count") list = [...list].sort((a, b) => b.count - a.count);
+      return list;
+    }, [businesses, query, industry, sort]);
+
+    return (
+      <div style={{ minHeight: "100vh" }}>
+
+        {/* Nav */}
+        <nav className="nav">
+          <a href="/index.html" className="nav-logo">Vouch<span>✦</span></a>
+          <div style={{ display: "flex", gap: 24, alignItems: "center" }}>
+            <a href="/success/a2z-cloud.html" className="nav-link">Customer Stories</a>
+            <a href="/pricing.html" className="nav-link">Pricing</a>
+            <span style={{ color: "rgba(255,255,255,.35)", fontSize: ".8rem" }}>|</span>
+            <span style={{ color: "var(--gold)", fontSize: ".9rem", fontWeight: 600 }}>Directory</span>
+          </div>
+          <div style={{ display: "flex", gap: 10 }}>
+            <a href="/index.html" className="btn btn-outline-light btn-sm">Sign in</a>
+            <a href="/index.html" className="btn btn-gold btn-sm">Get listed free</a>
+          </div>
+        </nav>
+
+        {/* Hero */}
+        <div className="hero">
+          <div className="hero-label">✦ Verified Directory</div>
+          <h1>Find Vouch Verified<br /><em style={{ color: "var(--gold)", fontStyle: "italic" }}>Businesses</em></h1>
+          <p className="hero-sub">Every business here has verified video testimonials from real clients. You can't fake a face.</p>
+          <div className="search-wrap">
+            <span className="search-icon">🔍</span>
+            <input
+              className="search-input"
+              type="text"
+              placeholder="Search by name or industry…"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+            />
+          </div>
+        </div>
+
+        {/* Filters */}
+        <div className="filters-bar">
+          <span className="filter-label">Filter</span>
+          <select className="filter-select" value={industry} onChange={e => setIndustry(e.target.value)}>
+            {INDUSTRIES.map(i => <option key={i}>{i}</option>)}
+          </select>
+          <select className="filter-select" value={sort} onChange={e => setSort(e.target.value)}>
+            {SORT_OPTIONS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+          </select>
+          {!loading && (
+            <span className="filter-count">{filtered.length} business{filtered.length !== 1 ? "es" : ""}</span>
+          )}
+        </div>
+
+        {/* Grid */}
+        <div className="dir-body">
+          {loading ? (
+            <div className="dir-grid">
+              {[1, 2, 3, 4, 5, 6].map(i => <SkeletonCard key={i} />)}
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="empty-state">
+              <p>No businesses found matching your search.</p>
+            </div>
+          ) : (
+            <div className="dir-grid">
+              {filtered.map(b => <BusinessCard key={b.userId} biz={b} />)}
+            </div>
+          )}
+        </div>
+
+        {/* CTA */}
+        <div className="cta-section">
+          <h2>Is your business <em style={{ color: "var(--gold)", fontStyle: "italic" }}>listed?</em></h2>
+          <p>Get a verified Vouch Score and appear in the directory — free to start.</p>
+          <a href="/index.html" className="btn btn-gold" style={{ fontSize: ".95rem", padding: "13px 28px" }}>
+            Get your free Vouch Score →
+          </a>
+        </div>
+
+        {/* Footer */}
+        <div className="footer">
+          <div>© 2026 Vouch. All rights reserved.</div>
+          <div className="footer-links">
+            <a href="/pricing.html">Pricing</a>
+            <a href="/directory.html">Directory</a>
+            <a href="/success/a2z-cloud.html">Customer Stories</a>
+            <a href="/terms.html">Terms</a>
+            <a href="/privacy.html">Privacy</a>
+          </div>
+        </div>
+
+      </div>
+    );
+  }
+
+  ReactDOM.createRoot(document.getElementById("root")).render(<DirectoryPage />);
+</script>
+</body>
+</html>

@@ -214,6 +214,11 @@ const style = `
 
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+  @keyframes badgePulse {
+    0%,100% { box-shadow: 0 0 0 1px rgba(200,169,110,.1), 0 8px 32px rgba(0,0,0,.5), 0 0 40px 8px rgba(200,169,110,.07); }
+    60%      { box-shadow: 0 0 0 1px rgba(200,169,110,.15), 0 8px 32px rgba(0,0,0,.5), 0 0 56px 16px rgba(200,169,110,.13); }
+  }
+
   /* ── Video Editor ── */
   .editor-overlay {
     position: fixed; inset: 0; background: #0a0a0a; z-index: 400;
@@ -4491,6 +4496,53 @@ function Dashboard({ onPreview, userId, userEmail, db, storage, onUpgrade }) {
                 ))}
               </div>
             </div>
+
+            {/* ── Your Vouch Badge ── */}
+            {["business", "agency", "enterprise"].includes(planKey) && (() => {
+              const embedCode = `<script src="https://vouchbusiness.com/badge.js?id=${userId}"></script>`;
+              return (
+                <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 14, padding: "24px 28px", marginTop: 16 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+                    <div style={{ fontSize: "0.72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--muted)" }}>Your Vouch Badge</div>
+                    <span style={{ background: "#fdf6e8", border: "1px solid #e8d5a3", color: "var(--gold)", fontSize: "0.65rem", fontWeight: 700, padding: "2px 9px", borderRadius: 99 }}>
+                      ✦ Included in your plan
+                    </span>
+                  </div>
+                  <div style={{ fontFamily: "Instrument Serif, serif", fontSize: "1.3rem", marginBottom: 8 }}>Embed your Vouch Score badge</div>
+                  <p style={{ fontSize: "0.84rem", color: "var(--muted)", lineHeight: 1.6, marginBottom: 18 }}>
+                    Paste this one line of code before the <code style={{ background: "var(--cream)", padding: "1px 5px", borderRadius: 4, fontSize: "0.8rem" }}>&lt;/body&gt;</code> tag on your website to display your live Vouch Score badge.
+                  </p>
+                  {/* Code block */}
+                  <div style={{ background: "#0a0a0a", border: "1px solid #2a2a2a", borderRadius: 10, overflow: "hidden", marginBottom: 14 }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 14px", borderBottom: "1px solid #1e1e1e" }}>
+                      <span style={{ fontSize: "0.68rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#555" }}>Embed code</span>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(embedCode).catch(() => {});
+                          const btn = document.getElementById("badge-copy-btn");
+                          if (btn) { btn.textContent = "Copied!"; btn.style.color = "#4caf7d"; setTimeout(() => { btn.textContent = "Copy"; btn.style.color = ""; }, 2000); }
+                        }}
+                        id="badge-copy-btn"
+                        style={{ background: "rgba(200,169,110,0.1)", border: "1px solid rgba(200,169,110,0.2)", color: "var(--gold)", borderRadius: 6, padding: "3px 12px", fontFamily: "DM Sans, sans-serif", fontSize: "0.72rem", fontWeight: 700, cursor: "pointer" }}
+                      >
+                        Copy
+                      </button>
+                    </div>
+                    <div style={{ padding: "14px 16px", overflowX: "auto" }}>
+                      <code style={{ fontFamily: "monospace", fontSize: "0.8rem", color: "var(--gold)", whiteSpace: "pre" }}>
+                        {embedCode}
+                      </code>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                    <span style={{ fontSize: "0.72rem", color: "var(--muted)" }}>Works on any website — WordPress, Webflow, Wix, raw HTML</span>
+                    <a href="/badge-preview.html" target="_blank" rel="noopener" style={{ fontSize: "0.78rem", color: "var(--gold)", fontWeight: 600, textDecoration: "none", whiteSpace: "nowrap" }}>
+                      See demo →
+                    </a>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         );
       })()}
@@ -4693,18 +4745,23 @@ function fmtPrice(eurPrice, cur) {
 const PRICING_PLANS = [
   { id: "free", name: "Free", monthlyEur: 0, annualMonthlyEur: 0, annualTotalEur: 0, annualSavingsEur: 0,
     popular: false, aiEditing: false, note: "No credit card required", cta: "Get started free",
+    tagline: "Start building your Vouch Score",
     features: ["1 testimonial per month", "Basic Vouch profile page", "Vouch branding on everything", "Listed in Vouch directory"] },
   { id: "solo", name: "Solo", monthlyEur: 49, annualMonthlyEur: 41, annualTotalEur: 490, annualSavingsEur: 98,
     popular: false, aiEditing: false, cta: "Start free trial",
+    tagline: "Grow your verified profile",
     features: ["5 testimonials per month", "Custom Vouch profile URL", "Remove Vouch branding", "Embeddable widget", "Basic analytics", "Email support"] },
   { id: "business", name: "Business", monthlyEur: 149, annualMonthlyEur: 124, annualTotalEur: 1490, annualSavingsEur: 298,
     popular: true, aiEditing: true, cta: "Start free trial",
+    tagline: "Display your Vouch Verified badge everywhere",
     features: ["20 testimonials per month", "Full Vouch profile with video gallery", "Vouch Verified badge for website", "⚡ AI editing — videos ready within minutes", "AI social clips in 3 formats (16:9, 9:16, 1:1)", "Embeddable testimonial wall widget", "Advanced analytics", "Automated follow-up sequences", "Priority email support"] },
   { id: "agency", name: "Agency", monthlyEur: 299, annualMonthlyEur: 249, annualTotalEur: 2990, annualSavingsEur: 598,
     popular: false, aiEditing: true, cta: "Start free trial",
+    tagline: "White-label trust for your clients",
     features: ["Unlimited testimonials", "Multiple brand profiles under one account", "White-label platform", "⚡ AI editing — videos ready within minutes", "API access for CRM integrations", "Zoho / HubSpot / Salesforce integration", "Custom branding and templates", "Dedicated account manager", "Phone support"] },
   { id: "enterprise", name: "Enterprise", monthlyEur: 999, annualMonthlyEur: 832, annualTotalEur: 9990, annualSavingsEur: 1998,
     popular: false, aiEditing: true, cta: "Contact us",
+    tagline: "Enterprise-grade trust at scale",
     features: ["Everything in Agency", "Custom SLA and uptime guarantee", "SSO and advanced security", "Custom integrations built for you", "Quarterly business reviews", "Vouch Score API", "Volume pricing for large teams"] },
 ];
 
@@ -4785,10 +4842,10 @@ function InAppPricing({ onGetStarted, activeUser }) {
       {/* Hero */}
       <div style={{ textAlign: "center", padding: "64px 24px 48px" }}>
         <div style={{ fontFamily: "Instrument Serif, serif", fontSize: "clamp(2.2rem, 6vw, 3.6rem)", lineHeight: 1.1, marginBottom: 14, letterSpacing: "-0.02em" }}>
-          The trust platform for<br /><em style={{ color: "var(--gold)", fontStyle: "italic" }}>modern businesses</em>
+          Build the trust that wins you<br /><em style={{ color: "var(--gold)", fontStyle: "italic" }}>more business</em>
         </div>
-        <div style={{ color: "var(--muted)", fontSize: "1.05rem", maxWidth: 420, margin: "0 auto 32px", lineHeight: 1.6 }}>
-          Record today. Polished video ready today.
+        <div style={{ color: "var(--muted)", fontSize: "1.05rem", maxWidth: 480, margin: "0 auto 32px", lineHeight: 1.6 }}>
+          Get a verified Vouch Score. Display it everywhere. Watch buyers choose you over competitors.
         </div>
 
         {/* Monthly / Annual toggle */}
@@ -4818,6 +4875,86 @@ function InAppPricing({ onGetStarted, activeUser }) {
           <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "5px 14px", borderRadius: 20, background: "#fdf6e8", border: "1px solid #e8d4a8", color: "var(--gold)", fontSize: "0.8rem", fontWeight: 500 }}>
             {cur.flag} Prices shown in {cur.symbol === "£" ? "GBP" : cur.symbol === "$" ? "USD" : cur.symbol === "€" ? "EUR" : "your currency"}
             {!detected && " · detecting…"}
+          </div>
+        </div>
+      </div>
+
+      {/* ── One badge. Infinite trust. ── */}
+      <div style={{ background: "var(--ink)", padding: "72px 24px" }}>
+        <div style={{ maxWidth: 960, margin: "0 auto", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 48, alignItems: "center" }}>
+          {/* Badge mockup */}
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 20 }}>
+            <div style={{
+              background: "#0e0e0e", border: "1px solid #2a2a2a", borderRadius: 16,
+              padding: "20px 24px", minWidth: 200, textAlign: "left",
+              boxShadow: "0 0 0 1px rgba(200,169,110,.1), 0 8px 32px rgba(0,0,0,.5), 0 0 40px 8px rgba(200,169,110,.07)",
+              animation: "badgePulse 3s ease-in-out infinite",
+            }}>
+              <div style={{ fontSize: ".65rem", fontWeight: 700, color: "var(--gold)", letterSpacing: ".07em", textTransform: "uppercase", fontStyle: "italic", marginBottom: 10 }}>✦ Vouch</div>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 4 }}>
+                <span style={{ fontSize: "2.2rem", fontWeight: 700, color: "var(--gold)", lineHeight: 1 }}>4.9</span>
+                <span style={{ fontSize: "1.1rem" }}>⭐</span>
+              </div>
+              <div style={{ fontSize: ".72rem", color: "#555", marginBottom: 10 }}>12 verified reviews</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: ".72rem", fontWeight: 700, color: "#4caf7d" }}>
+                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#4caf7d", display: "inline-block" }} />
+                ✓ Vouch Verified
+              </div>
+            </div>
+            <div style={{ background: "#111", border: "1px solid #222", borderRadius: 10, padding: "14px 18px", width: "100%", maxWidth: 360 }}>
+              <div style={{ fontSize: ".68rem", fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 8 }}>Your embed code</div>
+              <code style={{ fontFamily: "monospace", fontSize: ".78rem", color: "var(--gold)", display: "block", wordBreak: "break-all" }}>
+                {"<script src=\"vouchbusiness.com/badge.js?id=YOUR_ID\"></script>"}
+              </code>
+            </div>
+          </div>
+          {/* Text */}
+          <div style={{ color: "rgba(255,255,255,.85)" }}>
+            <div style={{ fontSize: ".72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".12em", color: "var(--gold)", marginBottom: 14 }}>One badge. Infinite trust.</div>
+            <div style={{ fontFamily: "Instrument Serif, serif", fontSize: "clamp(1.7rem, 3vw, 2.4rem)", color: "#fff", lineHeight: 1.2, marginBottom: 16 }}>
+              Every business that earns a Vouch Score gets a verified badge<br /><em style={{ color: "var(--gold)", fontStyle: "italic" }}>for their website</em>
+            </div>
+            <p style={{ color: "rgba(255,255,255,.55)", fontSize: ".93rem", lineHeight: 1.7, marginBottom: 24 }}>
+              Paste one script tag. The badge appears on every page — live score, verified status, and a link to your full video testimonial profile.
+            </p>
+            {[
+              "Updates automatically as new testimonials are approved",
+              "Shadow DOM — zero conflict with your existing styles",
+              "Works on any website in 30 seconds",
+            ].map((f, i) => (
+              <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start", marginBottom: 12 }}>
+                <span style={{ color: "var(--gold)", fontWeight: 700, flexShrink: 0 }}>✓</span>
+                <span style={{ fontSize: ".88rem", color: "rgba(255,255,255,.6)" }}>{f}</span>
+              </div>
+            ))}
+            <a href="/badge-preview.html" style={{ display: "inline-flex", alignItems: "center", gap: 7, marginTop: 8, color: "var(--gold)", fontSize: ".88rem", fontWeight: 600, textDecoration: "none" }}>
+              See badge demo →
+            </a>
+          </div>
+        </div>
+      </div>
+
+      {/* ── You can't fake a face ── */}
+      <div style={{ padding: "72px 24px", background: "var(--paper)" }}>
+        <div style={{ maxWidth: 860, margin: "0 auto", textAlign: "center" }}>
+          <div style={{ fontSize: ".72rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: ".12em", color: "var(--gold)", marginBottom: 14 }}>Verified proof</div>
+          <div style={{ fontFamily: "Instrument Serif, serif", fontSize: "clamp(1.8rem, 4vw, 2.8rem)", lineHeight: 1.15, letterSpacing: "-.02em", marginBottom: 14 }}>
+            You can't fake <em style={{ color: "var(--gold)", fontStyle: "italic" }}>a face</em>
+          </div>
+          <p style={{ color: "var(--muted)", fontSize: ".95rem", maxWidth: 520, margin: "0 auto 44px", lineHeight: 1.7 }}>
+            Unlike Google Reviews or Trustpilot, every Vouch testimonial is a verified video. Real people, on camera. Impossible to fake.
+          </p>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, maxWidth: 680, margin: "0 auto" }}>
+            <div style={{ background: "#fdf0f0", border: "1.5px solid #f5c5c5", borderRadius: 16, padding: "28px 24px", textAlign: "left" }}>
+              <div style={{ fontSize: "1.4rem", marginBottom: 12 }}>❌</div>
+              <div style={{ fontWeight: 700, fontSize: ".95rem", marginBottom: 8, color: "#b33" }}>Text review</div>
+              <p style={{ color: "#888", fontSize: ".85rem", lineHeight: 1.65 }}>Could be written by anyone. No face, no proof, no accountability. Buyers are trained to distrust them.</p>
+            </div>
+            <div style={{ background: "#f0fdf4", border: "1.5px solid #a3e4be", borderRadius: 16, padding: "28px 24px", textAlign: "left" }}>
+              <div style={{ fontSize: "1.4rem", marginBottom: 12 }}>✦</div>
+              <div style={{ fontWeight: 700, fontSize: ".95rem", marginBottom: 8, color: "#2a7a50" }}>Vouch video</div>
+              <p style={{ color: "#555", fontSize: ".85rem", lineHeight: 1.65 }}>Real person, verified on camera. Name, company, face, voice — every testimonial is accountable and impossible to fabricate.</p>
+            </div>
           </div>
         </div>
       </div>
@@ -4857,7 +4994,8 @@ function InAppPricing({ onGetStarted, activeUser }) {
                 </div>
               )}
               <div style={{ padding: "24px 20px", flex: 1, display: "flex", flexDirection: "column" }}>
-                <div style={{ fontSize: "0.7rem", fontWeight: 700, color: dark ? "#888" : "var(--muted)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 6 }}>{p.name}</div>
+                <div style={{ fontSize: "0.7rem", fontWeight: 700, color: dark ? "#888" : "var(--muted)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 4 }}>{p.name}</div>
+                {p.tagline && <div style={{ fontSize: "0.78rem", color: dark ? "rgba(255,255,255,.55)" : "var(--muted)", marginBottom: 10, lineHeight: 1.4 }}>{p.tagline}</div>}
                 <div style={{ fontFamily: "Instrument Serif, serif", fontSize: "2.5rem", fontWeight: 600, color: dark ? "#fff" : "var(--ink)", lineHeight: 1, marginBottom: 2 }}>
                   {displayPrice}
                 </div>

@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vouch Score Badge — Embed on your website</title>
+  <meta name="description" content="Add a live Vouch Score badge to any website in 30 seconds. One line of code." />
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230e0e0e'/><text y='.9em' font-size='70' x='50%' text-anchor='middle' dominant-baseline='middle' dy='0.1em' fill='%23c8a96e' font-family='serif' font-weight='bold'>V</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --ink:    #0e0e0e;
+      --paper:  #f5f0e8;
+      --cream:  #ede8dc;
+      --gold:   #c8a96e;
+      --muted:  #7a7060;
+      --card:   #faf7f2;
+      --border: #ddd8cc;
+    }
+    body { font-family: 'DM Sans', sans-serif; background: var(--paper); color: var(--ink); min-height: 100vh; }
+
+    /* Nav */
+    .nav {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 18px 40px; border-bottom: 1px solid var(--border);
+      background: var(--paper); position: sticky; top: 0; z-index: 100;
+    }
+    .nav-logo { font-family: 'Instrument Serif', serif; font-size: 1.5rem; letter-spacing: -0.02em; text-decoration: none; color: var(--ink); }
+    .nav-logo span { color: var(--gold); }
+    @media (max-width: 600px) { .nav { padding: 14px 20px; } }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 11px 24px; border-radius: 9px; border: none; cursor: pointer;
+      font-family: 'DM Sans', sans-serif; font-weight: 600; font-size: 0.9rem;
+      text-decoration: none; transition: all 0.2s; line-height: 1;
+    }
+    .btn-gold { background: var(--gold); color: #fff; }
+    .btn-gold:hover { background: #b8993e; }
+    .btn-outline { background: transparent; color: var(--ink); border: 1.5px solid var(--border); }
+    .btn-outline:hover { border-color: var(--ink); }
+    .btn-sm { padding: 8px 18px; font-size: 0.84rem; }
+
+    /* Hero */
+    .hero { background: var(--ink); color: #fff; padding: 72px 24px 64px; text-align: center; position: relative; overflow: hidden; }
+    .hero::before {
+      content: ""; position: absolute; inset: 0;
+      background: radial-gradient(ellipse 60% 50% at 50% 0%, rgba(200,169,110,0.13) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .hero-label {
+      display: inline-flex; align-items: center; gap: 7px;
+      background: rgba(200,169,110,0.12); border: 1px solid rgba(200,169,110,0.2);
+      border-radius: 99px; padding: 4px 14px; margin-bottom: 24px;
+      font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: var(--gold);
+    }
+    .hero h1 {
+      font-family: 'Instrument Serif', serif;
+      font-size: clamp(2rem, 5vw, 3.4rem); line-height: 1.1;
+      letter-spacing: -0.02em; margin-bottom: 18px; max-width: 680px; margin-left: auto; margin-right: auto;
+    }
+    .hero-sub { color: rgba(255,255,255,0.55); font-size: 1rem; max-width: 480px; margin: 0 auto; line-height: 1.65; }
+
+    /* Badge live preview */
+    .preview-section { padding: 64px 24px; }
+    .preview-inner { max-width: 960px; margin: 0 auto; }
+    .preview-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center; }
+    @media (max-width: 700px) { .preview-grid { grid-template-columns: 1fr; } }
+
+    .preview-window {
+      background: #f0f0ee; border-radius: 16px; overflow: hidden;
+      border: 1px solid #ddd; box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+    }
+    .preview-window-bar {
+      background: #e5e5e5; padding: 10px 14px; display: flex; align-items: center; gap: 7px;
+    }
+    .window-dot { width: 11px; height: 11px; border-radius: 50%; }
+    .preview-window-body {
+      background: #fafafa; padding: 32px 24px; min-height: 220px; position: relative;
+      display: flex; align-items: flex-start; justify-content: flex-start;
+    }
+    .website-placeholder { color: #ccc; font-size: 0.8rem; }
+    .website-placeholder h4 { font-size: 1rem; color: #bbb; margin-bottom: 6px; }
+    .website-placeholder p { font-size: 0.78rem; color: #ccc; line-height: 1.5; max-width: 200px; }
+    .badge-demo {
+      position: absolute; bottom: 18px; right: 18px;
+      background: #0e0e0e; border: 1px solid #2a2a2a; border-radius: 13px;
+      padding: 13px 16px; min-width: 170px; cursor: pointer;
+      box-shadow: 0 8px 28px rgba(0,0,0,0.4);
+      animation: badgePulse 3s 0.5s infinite;
+    }
+    @keyframes badgePulse {
+      0%,100% { box-shadow: 0 8px 28px rgba(0,0,0,.4), 0 0 0 0 rgba(200,169,110,.2); }
+      60%      { box-shadow: 0 8px 28px rgba(0,0,0,.4), 0 0 14px 5px rgba(200,169,110,.1); }
+    }
+    .badge-demo:hover { transform: translateY(-2px); }
+    .bd-logo { font-size: 0.65rem; font-weight: 700; color: #c8a96e; letter-spacing: 0.07em; text-transform: uppercase; font-style: italic; margin-bottom: 9px; }
+    .bd-score { display: flex; align-items: baseline; gap: 5px; margin-bottom: 3px; }
+    .bd-num { font-size: 1.9rem; font-weight: 700; color: #c8a96e; line-height: 1; }
+    .bd-star { font-size: 1rem; }
+    .bd-count { font-size: 0.7rem; color: #555; margin-bottom: 9px; }
+    .bd-verified { display: flex; align-items: center; gap: 5px; font-size: 0.7rem; font-weight: 600; color: #4caf7d; }
+    .bd-dot { width: 6px; height: 6px; border-radius: 50%; background: #4caf7d; }
+
+    /* Preview text side */
+    .preview-text h2 { font-family: 'Instrument Serif', serif; font-size: clamp(1.6rem, 3vw, 2.2rem); line-height: 1.2; margin-bottom: 14px; }
+    .preview-text p { color: var(--muted); font-size: 0.93rem; line-height: 1.7; margin-bottom: 16px; }
+    .feature-list { list-style: none; display: flex; flex-direction: column; gap: 10px; margin-bottom: 24px; }
+    .feature-list li { display: flex; gap: 10px; align-items: flex-start; font-size: 0.88rem; color: #333; }
+    .feat-check { color: var(--gold); font-weight: 700; flex-shrink: 0; margin-top: 1px; }
+
+    /* Install section */
+    .install-section { background: var(--ink); padding: 64px 24px; }
+    .install-inner { max-width: 720px; margin: 0 auto; }
+    .install-inner h2 {
+      font-family: 'Instrument Serif', serif; font-size: clamp(1.8rem, 4vw, 2.4rem);
+      color: #fff; line-height: 1.15; margin-bottom: 10px; text-align: center;
+    }
+    .install-inner > p { color: rgba(255,255,255,0.5); font-size: 0.93rem; text-align: center; margin-bottom: 36px; }
+
+    .steps { display: flex; flex-direction: column; gap: 28px; margin-bottom: 40px; }
+    .step { display: flex; gap: 18px; align-items: flex-start; }
+    .step-num {
+      width: 36px; height: 36px; border-radius: 50%; background: rgba(200,169,110,0.12);
+      border: 1px solid rgba(200,169,110,0.25); color: var(--gold);
+      font-size: 0.85rem; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .step-body { padding-top: 6px; }
+    .step-title { font-weight: 600; color: #fff; font-size: 0.95rem; margin-bottom: 4px; }
+    .step-desc { color: rgba(255,255,255,0.45); font-size: 0.85rem; line-height: 1.6; }
+
+    /* Code block */
+    .code-block {
+      background: #0a0a0a; border: 1px solid #2a2a2a; border-radius: 12px; overflow: hidden; margin-bottom: 12px;
+    }
+    .code-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 16px; border-bottom: 1px solid #1e1e1e;
+      font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #555;
+    }
+    .copy-btn {
+      background: rgba(200,169,110,0.1); border: 1px solid rgba(200,169,110,0.2);
+      color: var(--gold); border-radius: 6px; padding: 4px 12px;
+      font-family: 'DM Sans', sans-serif; font-size: 0.72rem; font-weight: 700; cursor: pointer;
+      transition: all 0.15s;
+    }
+    .copy-btn:hover { background: rgba(200,169,110,0.18); }
+    .copy-btn.copied { background: rgba(76,175,125,0.12); border-color: rgba(76,175,125,0.3); color: #4caf7d; }
+    .code-body { padding: 18px 20px; overflow-x: auto; }
+    .code-body code {
+      font-family: 'Fira Code', 'Cascadia Code', 'Consolas', monospace; font-size: 0.82rem;
+      color: #c8a96e; white-space: pre; display: block;
+    }
+    .code-body .code-tag { color: #888; }
+    .code-body .code-attr { color: #9e85bb; }
+    .code-body .code-val { color: #7ec8a6; }
+
+    /* How it works */
+    .hiw-section { padding: 64px 24px; }
+    .hiw-inner { max-width: 800px; margin: 0 auto; }
+    .hiw-inner h2 { font-family: 'Instrument Serif', serif; font-size: clamp(1.8rem, 4vw, 2.4rem); text-align: center; margin-bottom: 8px; }
+    .hiw-inner > p { color: var(--muted); text-align: center; font-size: 0.93rem; margin-bottom: 44px; }
+    .hiw-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+    @media (max-width: 640px) { .hiw-grid { grid-template-columns: 1fr; } }
+    .hiw-card {
+      background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 28px 24px;
+    }
+    .hiw-icon { font-size: 1.8rem; margin-bottom: 14px; }
+    .hiw-title { font-weight: 700; font-size: 0.95rem; margin-bottom: 8px; }
+    .hiw-desc { color: var(--muted); font-size: 0.85rem; line-height: 1.65; }
+
+    /* CTA */
+    .cta-section { background: var(--cream); border-top: 1px solid var(--border); padding: 64px 24px; text-align: center; }
+    .cta-section h2 { font-family: 'Instrument Serif', serif; font-size: clamp(1.7rem, 4vw, 2.4rem); margin-bottom: 12px; }
+    .cta-section p { color: var(--muted); font-size: 0.95rem; margin-bottom: 28px; }
+    .cta-buttons { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+
+    /* Footer */
+    .footer { border-top: 1px solid var(--border); text-align: center; padding: 28px 24px 40px; color: var(--muted); font-size: 0.78rem; }
+    .footer a { color: var(--muted); text-decoration: none; }
+    .footer a:hover { color: var(--gold); }
+    .footer-links { display: flex; gap: 18px; justify-content: center; margin-top: 8px; flex-wrap: wrap; }
+  </style>
+</head>
+<body>
+
+  <!-- Nav -->
+  <nav class="nav">
+    <a href="/index.html" class="nav-logo">Vouch<span>✦</span></a>
+    <div style="display:flex;gap:22px;align-items:center;">
+      <a href="/success/a2z-cloud.html" style="color:var(--muted);text-decoration:none;font-size:.9rem;font-weight:500;">Customer Stories</a>
+      <a href="/pricing.html" style="color:var(--muted);text-decoration:none;font-size:.9rem;font-weight:500;">Pricing</a>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <a href="/index.html" class="btn btn-outline btn-sm">Sign in</a>
+      <a href="/index.html" class="btn btn-gold btn-sm">Get started free</a>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <div class="hero">
+    <div class="hero-label">✦ Embeddable Widget</div>
+    <h1>One line of code.<br /><em style="color:var(--gold)">Live trust on every page.</em></h1>
+    <p class="hero-sub">Paste a single script tag anywhere on your website. Your Vouch Score badge appears automatically, live, and always up to date.</p>
+  </div>
+
+  <!-- Live Preview -->
+  <div class="preview-section">
+    <div class="preview-inner">
+      <div class="preview-grid">
+
+        <!-- Browser window mockup -->
+        <div class="preview-window">
+          <div class="preview-window-bar">
+            <div class="window-dot" style="background:#ff5f57;"></div>
+            <div class="window-dot" style="background:#febc2e;"></div>
+            <div class="window-dot" style="background:#28c840;"></div>
+            <div style="flex:1;background:#fff;border-radius:4px;height:20px;margin-left:8px;display:flex;align-items:center;padding:0 10px;">
+              <span style="font-size:.7rem;color:#999;">a2zcloud.co.uk</span>
+            </div>
+          </div>
+          <div class="preview-window-body">
+            <div class="website-placeholder">
+              <h4>A2Z Cloud</h4>
+              <p>Premium Zoho Implementation Partner. We help businesses get the most from their Zoho suite.</p>
+            </div>
+            <div class="badge-demo">
+              <div class="bd-logo">✦ Vouch</div>
+              <div class="bd-score">
+                <span class="bd-num">4.9</span>
+                <span class="bd-star">⭐</span>
+              </div>
+              <div class="bd-count">12 verified reviews</div>
+              <div class="bd-verified"><span class="bd-dot"></span>✓ Vouch Verified</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Text -->
+        <div class="preview-text">
+          <h2>Your Vouch Score badge, <em style="color:var(--gold);font-style:italic;">everywhere</em></h2>
+          <p>The badge fetches your latest testimonials in real time and shows your live score — no manual updates required.</p>
+          <ul class="feature-list">
+            <li><span class="feat-check">✓</span> Updates automatically as new testimonials come in</li>
+            <li><span class="feat-check">✓</span> Shadow DOM — zero style conflicts with your site</li>
+            <li><span class="feat-check">✓</span> Links to your full verified Vouch profile</li>
+            <li><span class="feat-check">✓</span> Works on WordPress, Webflow, Wix, Squarespace, raw HTML</li>
+            <li><span class="feat-check">✓</span> Pure vanilla JS — no framework, no dependencies</li>
+          </ul>
+          <a href="/index.html" class="btn btn-gold">Get your badge →</a>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Install Instructions -->
+  <div class="install-section">
+    <div class="install-inner">
+      <h2>Install in <em style="color:var(--gold);font-style:italic;">30 seconds</em></h2>
+      <p>One script tag. Paste it before the closing &lt;/body&gt; tag on any page.</p>
+
+      <div class="steps">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <div class="step-title">Copy your embed code</div>
+            <div class="step-desc">Your unique badge code is shown below. It's pre-filled with your Vouch ID — just copy and paste.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <div class="step-title">Paste before &lt;/body&gt; on your website</div>
+            <div class="step-desc">Works with any website builder or hand-coded HTML — WordPress, Webflow, Wix, Squarespace, raw HTML, anything.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <div class="step-title">Done — your badge is live</div>
+            <div class="step-desc">The badge appears at the bottom-right of every page. It automatically pulls your latest Vouch Score and updates as new testimonials are approved.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Code block -->
+      <div class="code-block">
+        <div class="code-header">
+          <span>Your embed code</span>
+          <button class="copy-btn" id="copyBtn" onclick="copyCode()">Copy</button>
+        </div>
+        <div class="code-body">
+          <code id="embedCode"><span class="code-tag">&lt;script</span> <span class="code-attr">src</span>=<span class="code-val">"https://vouchbusiness.com/badge.js?id=YOUR_VOUCH_ID"</span><span class="code-tag">&gt;&lt;/script&gt;</span></code>
+        </div>
+      </div>
+
+      <p style="color:rgba(255,255,255,.3);font-size:.78rem;text-align:center;">
+        Replace <code style="color:var(--gold);font-size:.78rem;">YOUR_VOUCH_ID</code> with your Vouch account ID, visible in your dashboard.
+        <a href="/index.html" style="color:var(--gold);text-decoration:none;margin-left:6px;">Sign in to get yours →</a>
+      </p>
+    </div>
+  </div>
+
+  <!-- How it works -->
+  <div class="hiw-section">
+    <div class="hiw-inner">
+      <h2>How it <em style="color:var(--gold);font-style:italic;">works</em></h2>
+      <p>The badge does all the work — you just paste one line.</p>
+      <div class="hiw-grid">
+        <div class="hiw-card">
+          <div class="hiw-icon">📡</div>
+          <div class="hiw-title">Fetches live data</div>
+          <div class="hiw-desc">On every page load, the badge pulls your approved testimonials directly from Vouch and calculates your current score.</div>
+        </div>
+        <div class="hiw-card">
+          <div class="hiw-icon">🛡</div>
+          <div class="hiw-title">Shadow DOM isolated</div>
+          <div class="hiw-desc">The badge runs in a Shadow DOM container so your site's CSS and the badge's styles never interfere with each other.</div>
+        </div>
+        <div class="hiw-card">
+          <div class="hiw-icon">🔗</div>
+          <div class="hiw-title">Links to your profile</div>
+          <div class="hiw-desc">A click on the badge opens your full Vouch profile in a new tab — where visitors can watch every verified video testimonial.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CTA -->
+  <div class="cta-section">
+    <h2>Ready to display your<br /><em style="color:var(--gold);font-style:italic;">verified score?</em></h2>
+    <p>Sign up free, collect your first testimonials, and embed your badge in minutes.</p>
+    <div class="cta-buttons">
+      <a href="/index.html" class="btn btn-gold" style="font-size:.95rem;padding:13px 28px;">Get your free Vouch Score →</a>
+      <a href="/success/a2z-cloud.html" class="btn btn-outline" style="font-size:.95rem;padding:13px 28px;">See a live example</a>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div>© 2026 Vouch. All rights reserved.</div>
+    <div class="footer-links">
+      <a href="/pricing.html">Pricing</a>
+      <a href="/directory.html">Directory</a>
+      <a href="/success/a2z-cloud.html">Customer Stories</a>
+      <a href="/terms.html">Terms</a>
+      <a href="/privacy.html">Privacy</a>
+    </div>
+  </div>
+
+  <script>
+    function copyCode() {
+      var code = '<script src="https://vouchbusiness.com/badge.js?id=YOUR_VOUCH_ID"><\/script>';
+      navigator.clipboard.writeText(code).then(function () {
+        var btn = document.getElementById('copyBtn');
+        btn.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(function () { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+      });
+    }
+  </script>
+</body>
+</html>
