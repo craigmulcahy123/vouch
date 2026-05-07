@@ -4499,7 +4499,7 @@ function Dashboard({ onPreview, userId, userEmail, db, storage, onUpgrade }) {
 
             {/* ── Your Vouch Badge ── */}
             {["business", "agency", "enterprise"].includes(planKey) && (() => {
-              const embedCode = `<script src="https://vouchbusiness.com/badge.js?id=${userId}"></script>`;
+              const embedCode = `<script src="https://vouchbusiness.com/badge.js?id=${userId}"><\/script>`;
               return (
                 <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 14, padding: "24px 28px", marginTop: 16 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
@@ -4904,7 +4904,7 @@ function InAppPricing({ onGetStarted, activeUser }) {
             <div style={{ background: "#111", border: "1px solid #222", borderRadius: 10, padding: "14px 18px", width: "100%", maxWidth: 360 }}>
               <div style={{ fontSize: ".68rem", fontWeight: 700, color: "#555", textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 8 }}>Your embed code</div>
               <code style={{ fontFamily: "monospace", fontSize: ".78rem", color: "var(--gold)", display: "block", wordBreak: "break-all" }}>
-                {"<script src=\"vouchbusiness.com/badge.js?id=YOUR_ID\"></script>"}
+                {"<script src=\"vouchbusiness.com/badge.js?id=YOUR_ID\"><\/script>"}
               </code>
             </div>
           </div>
