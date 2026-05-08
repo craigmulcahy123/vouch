@@ -44,7 +44,13 @@
     .nav-link { color: rgba(255,255,255,0.65); text-decoration: none; font-size: 0.9rem; font-weight: 500; transition: color 0.15s; }
     .nav-link:hover, .nav-link.active { color: #fff; }
     .nav-link.active { color: var(--gold); }
-    @media (max-width: 640px) { .nav { padding: 14px 20px; } .nav-links { display: none; } }
+    .nav-actions { display: flex; gap: 10px; align-items: center; }
+    .hamburger { display: none; background: none; border: none; cursor: pointer; padding: 4px 2px; flex-direction: column; gap: 5px; }
+    .hamburger span { display: block; width: 22px; height: 2px; background: #fff; border-radius: 2px; }
+    .mobile-menu { display: none; flex-direction: column; gap: 14px; padding: 16px 24px 20px; border-bottom: 1px solid rgba(255,255,255,0.1); background: var(--ink); }
+    .mobile-menu.open { display: flex; }
+    .mobile-menu-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
+    @media (max-width: 768px) { .nav { padding: 14px 20px; } .nav-links { display: none; } .nav-actions { display: none; } .hamburger { display: flex; } }
 
     /* ── Buttons ── */
     .btn {
@@ -434,23 +440,38 @@
 
   function SuccessPage() {
     const [activeVideo, setActiveVideo] = useState(null);
+    const [mobileOpen, setMobileOpen] = useState(false);
 
     return (
       <div style={{ minHeight: "100vh" }}>
 
         {/* ── Nav ── */}
         <nav className="nav">
-          <a href="/index.html" className="nav-logo">Vouch<span>✦</span></a>
+          <a href="/" className="nav-logo">Vouch<span>✦</span></a>
           <div className="nav-links">
-            <a href="/index.html#how-it-works" className="nav-link">How it works</a>
-            <a href="/pricing.html" className="nav-link">Pricing</a>
+            <a href="/directory" className="nav-link">Directory</a>
+            <a href="/partners" className="nav-link">Partners</a>
             <a href="/success/a2z-cloud.html" className="nav-link active">Customer Stories</a>
+            <a href="/pricing.html" className="nav-link">Pricing</a>
           </div>
-          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <div className="nav-actions">
             <a href="/index.html" className="btn btn-outline-light btn-sm">Sign in</a>
-            <a href="/index.html" className="btn btn-gold btn-sm">Get started free</a>
+            <a href="/index.html" className="btn btn-gold btn-sm">Get started free →</a>
           </div>
+          <button className="hamburger" onClick={() => setMobileOpen(v => !v)} aria-label="Menu"><span/><span/><span/></button>
         </nav>
+        {mobileOpen && (
+          <div className="mobile-menu open">
+            <a href="/directory" className="nav-link">Directory</a>
+            <a href="/partners" className="nav-link">Partners</a>
+            <a href="/success/a2z-cloud.html" className="nav-link active">Customer Stories</a>
+            <a href="/pricing.html" className="nav-link">Pricing</a>
+            <div className="mobile-menu-actions">
+              <a href="/index.html" className="btn btn-outline-light btn-sm">Sign in</a>
+              <a href="/index.html" className="btn btn-gold btn-sm">Get started free →</a>
+            </div>
+          </div>
+        )}
 
         {/* ── Hero ── */}
         <div className="hero">

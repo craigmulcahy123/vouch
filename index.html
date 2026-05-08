@@ -365,7 +365,7 @@ const style = `
     padding: 18px 40px; border-bottom: 1px solid var(--border);
     background: var(--paper); position: sticky; top: 0; z-index: 100;
   }
-  .nav-logo { font-family: 'Instrument Serif', serif; font-size: 1.9rem; font-weight: 600; letter-spacing: -0.02em; }
+  .nav-logo { font-family: 'Instrument Serif', serif; font-size: 1.9rem; font-weight: 600; letter-spacing: -0.02em; text-decoration: none; color: var(--ink); }
   .nav-logo span { color: #B8956A; }
   .nav-tabs { display: flex; gap: 4px; background: var(--cream); border-radius: 10px; padding: 4px; }
   .nav-tab {
@@ -374,6 +374,14 @@ const style = `
     color: var(--muted); cursor: pointer; transition: all 0.2s;
   }
   .nav-tab.active { background: var(--ink); color: #fff; }
+  .nav-link { color: var(--muted); text-decoration: none; font-size: 0.9rem; font-weight: 500; transition: color 0.15s; }
+  .nav-link:hover { color: var(--ink); }
+  .nav-actions { display: flex; gap: 10px; align-items: center; }
+  .hamburger { display: none; background: none; border: none; cursor: pointer; padding: 4px 2px; flex-direction: column; gap: 5px; }
+  .hamburger span { display: block; width: 22px; height: 2px; background: var(--ink); border-radius: 2px; }
+  .mobile-menu { display: none; flex-direction: column; gap: 14px; padding: 16px 24px 20px; border-bottom: 1px solid var(--border); background: var(--paper); position: sticky; top: 65px; z-index: 99; }
+  .mobile-menu.open { display: flex; }
+  .mobile-menu-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
 
   /* ── Dashboard ── */
   .dashboard { padding: 48px 40px; max-width: 1100px; margin: 0 auto; width: 100%; }
@@ -946,8 +954,11 @@ const style = `
   .user-dropdown-item:hover { background: var(--cream); }
   .user-dropdown-item.danger { color: var(--rust); }
 
-  @media (max-width: 700px) {
+  @media (max-width: 768px) {
     .nav { padding: 14px 20px; }
+    .nav-links { display: none; }
+    .nav-actions { display: none; }
+    .hamburger { display: flex; }
     .dashboard { padding: 28px 20px; }
     .form-row { grid-template-columns: 1fr; }
     .stats-row { grid-template-columns: repeat(2, 1fr); }
@@ -4777,6 +4788,7 @@ function InAppPricing({ onGetStarted, activeUser }) {
   const [detected, setDetected] = useState(false);
   const [annual, setAnnual] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState(null);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
     fetch("https://ipapi.co/json/", { signal: AbortSignal.timeout(4000) })
@@ -4831,13 +4843,31 @@ function InAppPricing({ onGetStarted, activeUser }) {
     <div style={{ minHeight: "100vh", background: "var(--paper)", fontFamily: "DM Sans, sans-serif" }}>
       {/* Nav */}
       <nav className="nav">
-        <div className="nav-logo serif">Vouch<span style={{ color: "var(--gold)" }}>✦</span></div>
-        <div style={{ display: "flex", gap: 24, alignItems: "center" }}>
-          <a href="/success/a2z-cloud.html" style={{ color: "var(--muted)", textDecoration: "none", fontSize: "0.9rem", fontWeight: 500 }}>Customer Stories</a>
-          <a href="/pricing.html" style={{ color: "var(--muted)", textDecoration: "none", fontSize: "0.9rem", fontWeight: 500 }}>Pricing</a>
+        <a href="/" className="nav-logo">Vouch<span>✦</span></a>
+        <div className="nav-links">
+          <a href="/directory" className="nav-link">Directory</a>
+          <a href="/partners" className="nav-link">Partners</a>
+          <a href="/success/a2z-cloud.html" className="nav-link">Customer Stories</a>
+          <a href="/pricing.html" className="nav-link">Pricing</a>
         </div>
-        <button className="btn btn-outline btn-sm" onClick={onGetStarted}>Sign in</button>
+        <div className="nav-actions">
+          <button className="btn btn-outline btn-sm" onClick={onGetStarted}>Sign in</button>
+          <button className="btn btn-gold btn-sm" onClick={onGetStarted}>Get started free →</button>
+        </div>
+        <button className="hamburger" onClick={() => setMobileOpen(v => !v)} aria-label="Menu"><span/><span/><span/></button>
       </nav>
+      {mobileOpen && (
+        <div className="mobile-menu open">
+          <a href="/directory" className="nav-link">Directory</a>
+          <a href="/partners" className="nav-link">Partners</a>
+          <a href="/success/a2z-cloud.html" className="nav-link">Customer Stories</a>
+          <a href="/pricing.html" className="nav-link">Pricing</a>
+          <div className="mobile-menu-actions">
+            <button className="btn btn-outline btn-sm" onClick={onGetStarted}>Sign in</button>
+            <button className="btn btn-gold btn-sm" onClick={onGetStarted}>Get started free →</button>
+          </div>
+        </div>
+      )}
 
       {/* Hero */}
       <div style={{ textAlign: "center", padding: "64px 24px 48px" }}>

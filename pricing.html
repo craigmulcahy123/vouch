@@ -57,6 +57,15 @@
     }
     .nav-logo { font-family: 'Instrument Serif', serif; font-size: 1.5rem; letter-spacing: -0.02em; text-decoration: none; color: var(--ink); }
     .nav-logo span { color: var(--gold); font-style: italic; }
+    .nav-links { display: flex; gap: 24px; align-items: center; }
+    .nav-link { color: var(--muted); text-decoration: none; font-size: 0.9rem; font-weight: 500; transition: color 0.15s; }
+    .nav-link:hover { color: var(--ink); }
+    .nav-actions { display: flex; gap: 10px; align-items: center; }
+    .hamburger { display: none; background: none; border: none; cursor: pointer; padding: 4px 2px; flex-direction: column; gap: 5px; }
+    .hamburger span { display: block; width: 22px; height: 2px; background: var(--ink); border-radius: 2px; }
+    .mobile-menu { display: none; flex-direction: column; gap: 14px; padding: 16px 24px 20px; border-bottom: 1px solid var(--border); background: var(--paper); }
+    .mobile-menu.open { display: flex; }
+    .mobile-menu-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
 
     /* Buttons */
     .btn {
@@ -191,8 +200,11 @@
     .legal-footer a { color: var(--muted); text-decoration: none; }
     .legal-footer a:hover { color: var(--gold); }
 
-    @media (max-width: 600px) {
+    @media (max-width: 768px) {
       .nav { padding: 14px 20px; }
+      .nav-links { display: none; }
+      .nav-actions { display: none; }
+      .hamburger { display: flex; }
     }
   </style>
 </head>
@@ -256,6 +268,7 @@
       const [cur, setCur] = useState(CURRENCIES_MAP.EU);
       const [detected, setDetected] = useState(false);
       const [annual, setAnnual] = useState(false);
+      const [mobileOpen, setMobileOpen] = useState(false);
 
       useEffect(() => {
         fetch("https://ipapi.co/json/", { signal: AbortSignal.timeout(4000) })
@@ -276,16 +289,31 @@
 
           {/* Nav */}
           <nav className="nav">
-            <a href="/index.html" className="nav-logo">Vouch<span>✦</span></a>
-            <div style={{ display: "flex", gap: 24, alignItems: "center" }}>
-              <a href="/directory.html" style={{ color: "var(--muted)", textDecoration: "none", fontSize: "0.9rem", fontWeight: 500 }}>Directory</a>
-              <a href="/success/a2z-cloud.html" style={{ color: "var(--muted)", textDecoration: "none", fontSize: "0.9rem", fontWeight: 500 }}>Customer Stories</a>
+            <a href="/" className="nav-logo">Vouch<span>✦</span></a>
+            <div className="nav-links">
+              <a href="/directory" className="nav-link">Directory</a>
+              <a href="/partners" className="nav-link">Partners</a>
+              <a href="/success/a2z-cloud.html" className="nav-link">Customer Stories</a>
+              <a href="/pricing.html" className="nav-link">Pricing</a>
             </div>
-            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+            <div className="nav-actions">
               <a href="/index.html" className="btn btn-outline btn-sm">Sign in</a>
-              <a href="/index.html" className="btn btn-gold btn-sm">Get started free</a>
+              <a href="/index.html" className="btn btn-gold btn-sm">Get started free →</a>
             </div>
+            <button className="hamburger" onClick={() => setMobileOpen(v => !v)} aria-label="Menu"><span/><span/><span/></button>
           </nav>
+          {mobileOpen && (
+            <div className="mobile-menu open">
+              <a href="/directory" className="nav-link">Directory</a>
+              <a href="/partners" className="nav-link">Partners</a>
+              <a href="/success/a2z-cloud.html" className="nav-link">Customer Stories</a>
+              <a href="/pricing.html" className="nav-link">Pricing</a>
+              <div className="mobile-menu-actions">
+                <a href="/index.html" className="btn btn-outline btn-sm">Sign in</a>
+                <a href="/index.html" className="btn btn-gold btn-sm">Get started free →</a>
+              </div>
+            </div>
+          )}
 
           {/* Hero */}
           <div style={{ textAlign: "center", padding: "64px 24px 48px" }}>

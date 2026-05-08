@@ -30,7 +30,16 @@
     }
     .nav-logo { font-family: 'Instrument Serif', serif; font-size: 1.5rem; letter-spacing: -0.02em; text-decoration: none; color: var(--ink); }
     .nav-logo span { color: var(--gold); }
-    @media (max-width: 600px) { .nav { padding: 14px 20px; } }
+    .nav-links { display: flex; gap: 24px; align-items: center; }
+    .nav-link { color: var(--muted); text-decoration: none; font-size: 0.9rem; font-weight: 500; transition: color 0.15s; }
+    .nav-link:hover { color: var(--ink); }
+    .nav-actions { display: flex; gap: 10px; align-items: center; }
+    .hamburger { display: none; background: none; border: none; cursor: pointer; padding: 4px 2px; flex-direction: column; gap: 5px; }
+    .hamburger span { display: block; width: 22px; height: 2px; background: var(--ink); border-radius: 2px; }
+    .mobile-menu { display: none; flex-direction: column; gap: 14px; padding: 16px 24px 20px; border-bottom: 1px solid var(--border); background: var(--paper); }
+    .mobile-menu.open { display: flex; }
+    .mobile-menu-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
+    @media (max-width: 768px) { .nav { padding: 14px 20px; } .nav-links { display: none; } .nav-actions { display: none; } .hamburger { display: flex; } }
 
     /* Buttons */
     .btn {
@@ -190,16 +199,32 @@
 
   <!-- Nav -->
   <nav class="nav">
-    <a href="/index.html" class="nav-logo">Vouch<span>✦</span></a>
-    <div style="display:flex;gap:22px;align-items:center;">
-      <a href="/success/a2z-cloud.html" style="color:var(--muted);text-decoration:none;font-size:.9rem;font-weight:500;">Customer Stories</a>
-      <a href="/pricing.html" style="color:var(--muted);text-decoration:none;font-size:.9rem;font-weight:500;">Pricing</a>
+    <a href="/" class="nav-logo">Vouch<span>✦</span></a>
+    <div class="nav-links">
+      <a href="/directory" class="nav-link">Directory</a>
+      <a href="/partners" class="nav-link">Partners</a>
+      <a href="/success/a2z-cloud.html" class="nav-link">Customer Stories</a>
+      <a href="/pricing.html" class="nav-link">Pricing</a>
     </div>
-    <div style="display:flex;gap:10px;align-items:center;">
+    <div class="nav-actions">
       <a href="/index.html" class="btn btn-outline btn-sm">Sign in</a>
-      <a href="/index.html" class="btn btn-gold btn-sm">Get started free</a>
+      <a href="/index.html" class="btn btn-gold btn-sm">Get started free →</a>
     </div>
+    <button class="hamburger" id="hamburger" onclick="toggleMenu()" aria-label="Menu">
+      <span></span><span></span><span></span>
+    </button>
   </nav>
+  <div class="mobile-menu" id="mobileMenu">
+    <a href="/directory" class="nav-link">Directory</a>
+    <a href="/partners" class="nav-link">Partners</a>
+    <a href="/success/a2z-cloud.html" class="nav-link">Customer Stories</a>
+    <a href="/pricing.html" class="nav-link">Pricing</a>
+    <div class="mobile-menu-actions">
+      <a href="/index.html" class="btn btn-outline btn-sm">Sign in</a>
+      <a href="/index.html" class="btn btn-gold btn-sm">Get started free →</a>
+    </div>
+  </div>
+  <script>function toggleMenu(){document.getElementById('mobileMenu').classList.toggle('open');}</script>
 
   <!-- Hero -->
   <div class="hero">

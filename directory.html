@@ -35,9 +35,16 @@
     }
     .nav-logo { font-family: 'Instrument Serif', serif; font-size: 1.5rem; text-decoration: none; color: #fff; }
     .nav-logo span { color: var(--gold); }
+    .nav-links { display: flex; gap: 24px; align-items: center; }
     .nav-link { color: rgba(255,255,255,.6); text-decoration: none; font-size: .9rem; font-weight: 500; transition: color .15s; }
     .nav-link:hover { color: #fff; }
-    @media (max-width: 640px) { .nav { padding: 14px 20px; } }
+    .nav-actions { display: flex; gap: 10px; align-items: center; }
+    .hamburger { display: none; background: none; border: none; cursor: pointer; padding: 4px 2px; flex-direction: column; gap: 5px; color: #fff; }
+    .hamburger span { display: block; width: 22px; height: 2px; background: #fff; border-radius: 2px; }
+    .mobile-menu { display: none; flex-direction: column; gap: 14px; padding: 16px 24px 20px; border-bottom: 1px solid rgba(255,255,255,.1); background: var(--ink); }
+    .mobile-menu.open { display: flex; }
+    .mobile-menu-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
+    @media (max-width: 768px) { .nav { padding: 14px 20px; } .nav-links { display: none; } .nav-actions { display: none; } .hamburger { display: flex; } }
 
     .btn {
       display: inline-flex; align-items: center; gap: 8px;
@@ -328,6 +335,7 @@
     const [sort, setSort] = useState("score");
     const [businesses, setBusinesses] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [mobileOpen, setMobileOpen] = useState(false);
 
     useEffect(() => {
       setLoading(true);
@@ -357,18 +365,31 @@
 
         {/* Nav */}
         <nav className="nav">
-          <a href="/index.html" className="nav-logo">Vouch<span>✦</span></a>
-          <div style={{ display: "flex", gap: 24, alignItems: "center" }}>
+          <a href="/" className="nav-logo">Vouch<span>✦</span></a>
+          <div className="nav-links">
+            <a href="/directory" className="nav-link" style={{color:"var(--gold)"}}>Directory</a>
+            <a href="/partners" className="nav-link">Partners</a>
             <a href="/success/a2z-cloud.html" className="nav-link">Customer Stories</a>
             <a href="/pricing.html" className="nav-link">Pricing</a>
-            <span style={{ color: "rgba(255,255,255,.35)", fontSize: ".8rem" }}>|</span>
-            <span style={{ color: "var(--gold)", fontSize: ".9rem", fontWeight: 600 }}>Directory</span>
           </div>
-          <div style={{ display: "flex", gap: 10 }}>
+          <div className="nav-actions">
             <a href="/index.html" className="btn btn-outline-light btn-sm">Sign in</a>
-            <a href="/index.html" className="btn btn-gold btn-sm">Get listed free</a>
+            <a href="/index.html" className="btn btn-gold btn-sm">Get started free →</a>
           </div>
+          <button className="hamburger" onClick={() => setMobileOpen(v => !v)} aria-label="Menu"><span/><span/><span/></button>
         </nav>
+        {mobileOpen && (
+          <div className="mobile-menu open">
+            <a href="/directory" className="nav-link" style={{color:"var(--gold)"}}>Directory</a>
+            <a href="/partners" className="nav-link">Partners</a>
+            <a href="/success/a2z-cloud.html" className="nav-link">Customer Stories</a>
+            <a href="/pricing.html" className="nav-link">Pricing</a>
+            <div className="mobile-menu-actions">
+              <a href="/index.html" className="btn btn-outline-light btn-sm">Sign in</a>
+              <a href="/index.html" className="btn btn-gold btn-sm">Get started free →</a>
+            </div>
+          </div>
+        )}
 
         {/* Hero */}
         <div className="hero">

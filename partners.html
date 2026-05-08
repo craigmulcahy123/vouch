@@ -39,14 +39,20 @@
       color: var(--gold); text-decoration: none; letter-spacing: 0.02em;
     }
     .nav-links { display: flex; align-items: center; gap: 28px; }
-    .nav-links a { color: #aaa; text-decoration: none; font-size: 0.88rem; font-weight: 500; transition: color 0.15s; }
-    .nav-links a:hover { color: #fff; }
-    .nav-cta {
-      background: var(--gold); color: var(--ink); border: none;
-      padding: 9px 20px; border-radius: 8px; font-family: 'DM Sans', sans-serif;
-      font-weight: 700; font-size: 0.88rem; cursor: pointer; transition: opacity 0.15s;
-    }
-    .nav-cta:hover { opacity: 0.88; }
+    .nav-links a, .nav-link { color: #aaa; text-decoration: none; font-size: 0.88rem; font-weight: 500; transition: color 0.15s; }
+    .nav-links a:hover, .nav-link:hover { color: #fff; }
+    .nav-actions { display: flex; gap: 10px; align-items: center; }
+    .btn-sm { padding: 7px 16px !important; font-size: 0.82rem !important; }
+    .nav-btn-outline { background: transparent; color: #aaa; border: 1px solid #333; padding: 7px 16px; border-radius: 8px; font-family: 'DM Sans', sans-serif; font-weight: 600; font-size: 0.82rem; text-decoration: none; transition: all 0.15s; cursor: pointer; }
+    .nav-btn-outline:hover { border-color: #666; color: #fff; }
+    .nav-btn-gold { background: var(--gold); color: var(--ink); border: none; padding: 7px 16px; border-radius: 8px; font-family: 'DM Sans', sans-serif; font-weight: 700; font-size: 0.82rem; text-decoration: none; transition: opacity 0.15s; cursor: pointer; display: inline-block; }
+    .nav-btn-gold:hover { opacity: 0.88; }
+    .hamburger { display: none; background: none; border: none; cursor: pointer; padding: 4px 2px; flex-direction: column; gap: 5px; }
+    .hamburger span { display: block; width: 22px; height: 2px; background: #fff; border-radius: 2px; }
+    .mobile-menu { display: none; flex-direction: column; gap: 14px; padding: 16px 24px 20px; border-bottom: 1px solid #1e1e1e; background: rgba(14,14,14,0.98); }
+    .mobile-menu.open { display: flex; position: sticky; top: 64px; z-index: 99; }
+    .mobile-menu-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px; }
+    @media (max-width: 768px) { nav { padding: 0 20px; } .nav-links { display: none; } .nav-actions { display: none; } .hamburger { display: flex; } }
 
     /* ── Hero ── */
     .hero {
@@ -358,15 +364,32 @@
 
   <!-- ── Navigation ── -->
   <nav>
-    <a href="/" class="nav-logo">✦ Vouch</a>
+    <a href="/" class="nav-logo">Vouch<span style="color:var(--gold)">✦</span></a>
     <div class="nav-links">
-      <a href="#how-it-works">How it works</a>
-      <a href="#tiers">Commission tiers</a>
-      <a href="#calculator">Calculator</a>
-      <a href="#faq">FAQ</a>
+      <a href="/directory">Directory</a>
+      <a href="/partners" style="color:#fff">Partners</a>
+      <a href="/success/a2z-cloud.html">Customer Stories</a>
+      <a href="/pricing.html">Pricing</a>
     </div>
-    <button class="nav-cta" onclick="openModal()">Apply to Partner →</button>
+    <div class="nav-actions">
+      <a href="/index.html" class="nav-btn-outline">Sign in</a>
+      <a href="/index.html" class="nav-btn-gold">Get started free →</a>
+    </div>
+    <button class="hamburger" id="hamburger" onclick="toggleMenu()" aria-label="Menu">
+      <span></span><span></span><span></span>
+    </button>
   </nav>
+  <div class="mobile-menu" id="mobileMenu">
+    <a href="/directory" class="nav-link">Directory</a>
+    <a href="/partners" class="nav-link" style="color:#fff">Partners</a>
+    <a href="/success/a2z-cloud.html" class="nav-link">Customer Stories</a>
+    <a href="/pricing.html" class="nav-link">Pricing</a>
+    <div class="mobile-menu-actions">
+      <a href="/index.html" class="nav-btn-outline">Sign in</a>
+      <a href="/index.html" class="nav-btn-gold">Get started free →</a>
+    </div>
+  </div>
+  <script>function toggleMenu(){document.getElementById('mobileMenu').classList.toggle('open');}</script>
 
   <!-- ── Hero ── -->
   <section class="hero">
