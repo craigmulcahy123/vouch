@@ -5400,7 +5400,7 @@ function App() {
           <>
             <nav className="nav">
               <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-                <button className="nav-logo serif" style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }} onClick={() => setView("dashboard")}>Vouch<span>✦</span></button>
+                <a href="/" className="nav-logo serif">Vouch<span>✦</span></a>
                 <div className="nav-tabs">
                   <button className={`nav-tab ${view === "dashboard" ? "active" : ""}`} onClick={() => setView("dashboard")}>Dashboard</button>
                   <button className="nav-tab" onClick={() => handlePreview(null)}>Client View</button>
