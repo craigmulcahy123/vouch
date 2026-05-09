@@ -3897,9 +3897,8 @@ function Dashboard({ onPreview, userId, userEmail, db, storage, onUpgrade }) {
   }, [testimonials]);
 
   async function analyseTestimonial(t) {
-    const processed = t.processedVideoURLs || {};
-    const indices = Object.keys(processed)
-      .map(k => parseInt(k.replace('q', ''), 10))
+    const indices = Object.keys(t.videoURLs || {})
+      .map(k => parseInt(k, 10))
       .filter(n => !isNaN(n))
       .sort((a, b) => a - b);
     if (indices.length === 0) return;
@@ -4321,7 +4320,7 @@ function Dashboard({ onPreview, userId, userEmail, db, storage, onUpgrade }) {
                         </button>
                       );
                     })()}
-                    {(t.status === "processed" || t.status === "approved") && t.processedVideoURLs?.q0 && (() => {
+                    {(t.status === "processed" || t.status === "approved") && t.videoURLs && Object.keys(t.videoURLs).length > 0 && (() => {
                       const aiLoading = aiLoadingMap[t.id];
                       const hasTranscripts = t.transcripts && Object.keys(t.transcripts).length > 0;
                       return (
