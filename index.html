@@ -3915,8 +3915,16 @@ function Dashboard({ onPreview, userId, userEmail, db, storage, onUpgrade }) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ userId, testimonialId: t.id, questionIndex: qi }),
         });
-        const data = await res.json();
-        if (!data.success && data.reason !== 'no_file') throw new Error(data.error || 'Transcription failed');
+        let data;
+        try {
+          data = await res.json();
+        } catch {
+          throw new Error(`HTTP ${res.status} — server returned non-JSON response`);
+        }
+        if (!data.success && data.reason !== 'no_file') {
+          const msg = data.stage ? `[${data.stage}] ${data.error}` : (data.error || 'Transcription failed');
+          throw new Error(msg);
+        }
       } catch (e) {
         setAiErrorMap(prev => ({ ...prev, [t.id]: e.message || 'Transcription failed' }));
         setAiLoadingMap(prev => { const n = { ...prev }; delete n[t.id]; return n; });
@@ -4233,12 +4241,11 @@ function Dashboard({ onPreview, userId, userEmail, db, storage, onUpgrade }) {
                     </div>
                     <div className="t-company">{t.clientCompany} · {t.campaignName}</div>
                     <div className="t-stars">{"★".repeat(t.rating)}{"☆".repeat(5 - t.rating)}</div>
-                    {t.quote === "Processing transcript..." ? (
-                      t.transcripts && Object.keys(t.transcripts).length > 0 ? (
-                        <QuoteProcessingIndicator key={t.id} testimonialId={t.id} userId={userId} db={db} />
-                      ) : null
-                    ) : (
+                    {t.quote && t.quote !== "Processing transcript..." && (
                       <div className="t-quote">"{t.quote}"</div>
+                    )}
+                    {t.quote === "Processing transcript..." && t.transcripts && Object.keys(t.transcripts).length > 0 && (
+                      <QuoteProcessingIndicator key={t.id} testimonialId={t.id} userId={userId} db={db} />
                     )}
                     {t.status === "processing" && (
                       <div style={{ marginTop: 8, fontSize: "0.8rem", color: "#7eb8f7", display: "flex", alignItems: "center", gap: 6 }}>

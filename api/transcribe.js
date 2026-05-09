@@ -27,12 +27,12 @@ function downloadFile(url, dest) {
       if (res.statusCode === 404 || res.statusCode === 403) {
         file.close();
         fs.unlink(dest, () => {});
-        return reject({ noFile: true });
+        return reject({ noFile: true, statusCode: res.statusCode });
       }
       if (res.statusCode !== 200) {
         file.close();
         fs.unlink(dest, () => {});
-        return reject(new Error(`HTTP ${res.statusCode}`));
+        return reject(new Error(`HTTP ${res.statusCode} downloading file`));
       }
       res.pipe(file);
       file.on('finish', () => file.close(resolve));
@@ -42,55 +42,106 @@ function downloadFile(url, dest) {
 }
 
 async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-
-  const { userId, testimonialId, questionIndex } = req.body || {};
-  if (!userId || !testimonialId || questionIndex === undefined) {
-    return res.status(400).json({ error: 'Missing userId, testimonialId, or questionIndex' });
-  }
-
-  const db = getDb();
-  const docRef = db.collection('users').doc(userId).collection('testimonials').doc(testimonialId);
-
-  const snap = await docRef.get();
-  const data = snap.exists ? snap.data() : {};
-  const cached = data.transcripts && data.transcripts[String(questionIndex)];
-  if (cached && cached.text) {
-    return res.json({ success: true, transcript: cached.text, cached: true });
-  }
-
-  const bucket = 'vouch-cdf1c.firebasestorage.app';
-  const url = `https://storage.googleapis.com/${bucket}/users/${userId}/processed/${testimonialId}/q${questionIndex}.mp4`;
-  const tmpPath = path.join('/tmp', `${testimonialId}_q${questionIndex}_${Date.now()}.mp4`);
-
   try {
-    await downloadFile(url, tmpPath);
-  } catch (err) {
-    if (err && err.noFile) return res.json({ success: false, reason: 'no_file' });
-    return res.status(500).json({ error: err.message || 'Download failed' });
-  }
+    if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-  let transcript;
-  try {
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    const result = await openai.audio.transcriptions.create({
-      model: 'whisper-1',
-      file: fs.createReadStream(tmpPath),
+    // ── Log env var presence (not values) ──────────────────────────────────
+    console.log('[transcribe] env check:', {
+      FIREBASE_SERVICE_ACCOUNT_KEY: !!process.env.FIREBASE_SERVICE_ACCOUNT_KEY,
+      OPENAI_API_KEY: !!process.env.OPENAI_API_KEY,
     });
-    transcript = result.text;
+
+    const { userId, testimonialId, questionIndex } = req.body || {};
+    console.log('[transcribe] request:', { userId, testimonialId, questionIndex });
+
+    if (!userId || !testimonialId || questionIndex === undefined) {
+      return res.status(400).json({ success: false, error: 'Missing userId, testimonialId, or questionIndex' });
+    }
+
+    // ── Firestore cache check ───────────────────────────────────────────────
+    let db;
+    try {
+      db = getDb();
+      console.log('[transcribe] Firestore initialised');
+    } catch (err) {
+      console.error('[transcribe] Firestore init failed:', err.message, err.stack);
+      return res.status(500).json({ success: false, error: err.message, stack: err.stack, stage: 'firestore_init' });
+    }
+
+    const docRef = db.collection('users').doc(userId).collection('testimonials').doc(testimonialId);
+
+    let snap;
+    try {
+      snap = await docRef.get();
+    } catch (err) {
+      console.error('[transcribe] Firestore get failed:', err.message, err.stack);
+      return res.status(500).json({ success: false, error: err.message, stack: err.stack, stage: 'firestore_get' });
+    }
+
+    const data = snap.exists ? snap.data() : {};
+    const cached = data.transcripts && data.transcripts[String(questionIndex)];
+    if (cached && cached.text) {
+      console.log('[transcribe] returning cached transcript for q' + questionIndex);
+      return res.json({ success: true, transcript: cached.text, cached: true });
+    }
+
+    // ── Download MP4 from Firebase Storage ─────────────────────────────────
+    const bucket = 'vouch-cdf1c.firebasestorage.app';
+    const storageUrl = `https://storage.googleapis.com/${bucket}/users/${userId}/processed/${testimonialId}/q${questionIndex}.mp4`;
+    const tmpPath = path.join('/tmp', `${testimonialId}_q${questionIndex}_${Date.now()}.mp4`);
+
+    console.log('[transcribe] downloading:', storageUrl);
+
+    try {
+      await downloadFile(storageUrl, tmpPath);
+      console.log('[transcribe] download complete, saved to', tmpPath);
+    } catch (err) {
+      if (err && err.noFile) {
+        console.log('[transcribe] no file at q' + questionIndex + ' (HTTP ' + err.statusCode + ')');
+        return res.json({ success: false, reason: 'no_file' });
+      }
+      console.error('[transcribe] download failed:', err.message, err.stack);
+      return res.status(500).json({ success: false, error: err.message, stack: err.stack, stage: 'download' });
+    }
+
+    // ── Whisper transcription ───────────────────────────────────────────────
+    let transcript;
+    try {
+      console.log('[transcribe] sending to Whisper...');
+      const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+      const result = await openai.audio.transcriptions.create({
+        model: 'whisper-1',
+        file: fs.createReadStream(tmpPath),
+      });
+      transcript = result.text;
+      console.log('[transcribe] Whisper done, transcript length:', transcript.length);
+    } catch (err) {
+      console.error('[transcribe] Whisper failed:', err.message, err.stack);
+      return res.status(500).json({ success: false, error: err.message, stack: err.stack, stage: 'whisper' });
+    } finally {
+      fs.unlink(tmpPath, () => {});
+    }
+
+    // ── Store in Firestore ──────────────────────────────────────────────────
+    try {
+      await docRef.set({
+        transcripts: {
+          [String(questionIndex)]: { text: transcript, createdAt: Date.now() },
+        },
+      }, { merge: true });
+      console.log('[transcribe] saved transcript to Firestore for q' + questionIndex);
+    } catch (err) {
+      console.error('[transcribe] Firestore write failed:', err.message, err.stack);
+      return res.status(500).json({ success: false, error: err.message, stack: err.stack, stage: 'firestore_write' });
+    }
+
+    return res.json({ success: true, transcript });
+
   } catch (err) {
-    return res.status(500).json({ error: err.message || 'Whisper transcription failed' });
-  } finally {
-    fs.unlink(tmpPath, () => {});
+    // Top-level catch — ensures we always return JSON
+    console.error('[transcribe] unhandled error:', err.message, err.stack);
+    return res.status(500).json({ success: false, error: err.message, stack: err.stack, stage: 'unhandled' });
   }
-
-  await docRef.set({
-    transcripts: {
-      [String(questionIndex)]: { text: transcript, createdAt: Date.now() },
-    },
-  }, { merge: true });
-
-  return res.json({ success: true, transcript });
 }
 
 module.exports = handler;
