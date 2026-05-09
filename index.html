@@ -4235,7 +4235,9 @@ function Dashboard({ onPreview, userId, userEmail, db, storage, onUpgrade }) {
                     <div className="t-company">{t.clientCompany} · {t.campaignName}</div>
                     <div className="t-stars">{"★".repeat(t.rating)}{"☆".repeat(5 - t.rating)}</div>
                     {t.quote === "Processing transcript..." ? (
-                      <QuoteProcessingIndicator key={t.id} testimonialId={t.id} userId={userId} db={db} />
+                      t.transcripts && Object.keys(t.transcripts).length > 0 ? (
+                        <QuoteProcessingIndicator key={t.id} testimonialId={t.id} userId={userId} db={db} />
+                      ) : null
                     ) : (
                       <div className="t-quote">"{t.quote}"</div>
                     )}
@@ -4285,34 +4287,6 @@ function Dashboard({ onPreview, userId, userEmail, db, storage, onUpgrade }) {
                         ✂ Edit
                       </button>
                     )}
-                    {t.status === "approved" && t.processedVideoURLs?.q0 && (() => {
-                      const aiLoading = aiLoadingMap[t.id];
-                      const hasTranscripts = t.transcripts && Object.keys(t.transcripts).length > 0;
-                      return (
-                        <>
-                          <button
-                            className="btn btn-sm btn-outline"
-                            disabled={!!aiLoading}
-                            style={{
-                              color: aiLoading ? "#7eb8f7" : "#c8a96e",
-                              borderColor: aiLoading ? "#7eb8f7" : "#c8a96e55",
-                              cursor: aiLoading ? "default" : "pointer",
-                              display: "flex", alignItems: "center", gap: 5,
-                            }}
-                            onClick={() => !aiLoading && analyseTestimonial(t)}>
-                            {aiLoading ? (
-                              <>
-                                <span style={{ width: 10, height: 10, borderRadius: "50%", border: "2px solid #7eb8f7", borderTopColor: "transparent", animation: "spin 0.8s linear infinite", display: "inline-block", flexShrink: 0 }} />
-                                Q{aiLoading.current}/{aiLoading.total}…
-                              </>
-                            ) : hasTranscripts ? "↺ Re-analyse" : "✦ Analyse"}
-                          </button>
-                          {aiErrorMap[t.id] && (
-                            <div style={{ fontSize: "0.75rem", color: "#e05c5c" }}>{aiErrorMap[t.id]}</div>
-                          )}
-                        </>
-                      );
-                    })()}
                     {t.videoURLs && Object.keys(t.videoURLs).length > 0 && (
                       <button className="btn btn-sm btn-primary" onClick={() => { console.log("[vouch/watch] Watch clicked —", t.id, t.clientName); setPlaybackTarget(t); }}>
                         ▶ Watch
@@ -4345,6 +4319,34 @@ function Dashboard({ onPreview, userId, userEmail, db, storage, onUpgrade }) {
                             </>
                           ) : "↺ Reprocess"}
                         </button>
+                      );
+                    })()}
+                    {(t.status === "processed" || t.status === "approved") && t.processedVideoURLs?.q0 && (() => {
+                      const aiLoading = aiLoadingMap[t.id];
+                      const hasTranscripts = t.transcripts && Object.keys(t.transcripts).length > 0;
+                      return (
+                        <>
+                          <button
+                            className="btn btn-sm btn-outline"
+                            disabled={!!aiLoading}
+                            style={{
+                              color: aiLoading ? "#7eb8f7" : "#c8a96e",
+                              borderColor: aiLoading ? "#7eb8f7" : "#c8a96e55",
+                              cursor: aiLoading ? "default" : "pointer",
+                              display: "flex", alignItems: "center", gap: 5,
+                            }}
+                            onClick={() => !aiLoading && analyseTestimonial(t)}>
+                            {aiLoading ? (
+                              <>
+                                <span style={{ width: 10, height: 10, borderRadius: "50%", border: "2px solid #7eb8f7", borderTopColor: "transparent", animation: "spin 0.8s linear infinite", display: "inline-block", flexShrink: 0 }} />
+                                Q{aiLoading.current}/{aiLoading.total}…
+                              </>
+                            ) : hasTranscripts ? "↺ Re-analyse" : "✦ Analyse"}
+                          </button>
+                          {aiErrorMap[t.id] && (
+                            <div style={{ fontSize: "0.75rem", color: "#e05c5c" }}>{aiErrorMap[t.id]}</div>
+                          )}
+                        </>
                       );
                     })()}
                     <div style={{ position: "relative" }}>
