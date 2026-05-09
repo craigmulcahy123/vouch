@@ -4,6 +4,7 @@
   "private": true,
   "dependencies": {
     "stripe": "^16.0.0",
-    "firebase-admin": "^12.1.0"
+    "firebase-admin": "^12.1.0",
+    "openai": "^4.0.0"
   }
 }

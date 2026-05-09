@@ -2986,6 +2986,12 @@ function VideoPlaybackModal({ testimonial, onClose }) {
             <span style={{ color: "var(--gold)", fontWeight: 600 }}>Q: </span>{prompts[Number(activeIdx[1])]}
           </div>
         )}
+        {activeIdx !== null && /^q(\d)$/.test(activeIdx) && testimonial.transcripts?.[activeIdx[1]]?.text && (
+          <div style={{ marginTop: 12, padding: "12px 16px", background: "#111", borderRadius: 8, border: "1px solid #2c2c2c" }}>
+            <div style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--gold)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.06em" }}>Transcript</div>
+            <div style={{ fontSize: "0.85rem", color: "#b0aaa0", lineHeight: 1.6 }}>{testimonial.transcripts[activeIdx[1]].text}</div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -3727,6 +3733,8 @@ function Dashboard({ onPreview, userId, userEmail, db, storage, onUpgrade }) {
   const [editTarget, setEditTarget] = useState(null);
   const [downloadDropdown, setDownloadDropdown] = useState(null);
   const [reprocessingIds, setReprocessingIds] = useState(new Set());
+  const [aiLoadingMap, setAiLoadingMap] = useState({});
+  const [aiErrorMap, setAiErrorMap] = useState({});
 
   const [campaigns, setCampaigns] = useState([]);
   const [testimonials, setTestimonials] = useState([]);
@@ -3880,6 +3888,44 @@ function Dashboard({ onPreview, userId, userEmail, db, storage, onUpgrade }) {
     document.body.removeChild(a);
     URL.revokeObjectURL(objUrl);
     markDownloaded(t.id);
+  }
+
+  useEffect(() => {
+    if (!playbackTarget) return;
+    const fresh = testimonials.find(t => t.id === playbackTarget.id);
+    if (fresh) setPlaybackTarget(fresh);
+  }, [testimonials]);
+
+  async function analyseTestimonial(t) {
+    const processed = t.processedVideoURLs || {};
+    const indices = Object.keys(processed)
+      .map(k => parseInt(k.replace('q', ''), 10))
+      .filter(n => !isNaN(n))
+      .sort((a, b) => a - b);
+    if (indices.length === 0) return;
+
+    setAiLoadingMap(prev => ({ ...prev, [t.id]: { active: true, current: 0, total: indices.length } }));
+    setAiErrorMap(prev => { const n = { ...prev }; delete n[t.id]; return n; });
+
+    for (let i = 0; i < indices.length; i++) {
+      const qi = indices[i];
+      setAiLoadingMap(prev => ({ ...prev, [t.id]: { active: true, current: i + 1, total: indices.length } }));
+      try {
+        const res = await fetch('/api/transcribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId, testimonialId: t.id, questionIndex: qi }),
+        });
+        const data = await res.json();
+        if (!data.success && data.reason !== 'no_file') throw new Error(data.error || 'Transcription failed');
+      } catch (e) {
+        setAiErrorMap(prev => ({ ...prev, [t.id]: e.message || 'Transcription failed' }));
+        setAiLoadingMap(prev => { const n = { ...prev }; delete n[t.id]; return n; });
+        return;
+      }
+    }
+
+    setAiLoadingMap(prev => { const n = { ...prev }; delete n[t.id]; return n; });
   }
 
   return (
@@ -4239,6 +4285,34 @@ function Dashboard({ onPreview, userId, userEmail, db, storage, onUpgrade }) {
                         ✂ Edit
                       </button>
                     )}
+                    {t.status === "approved" && t.processedVideoURLs?.q0 && (() => {
+                      const aiLoading = aiLoadingMap[t.id];
+                      const hasTranscripts = t.transcripts && Object.keys(t.transcripts).length > 0;
+                      return (
+                        <>
+                          <button
+                            className="btn btn-sm btn-outline"
+                            disabled={!!aiLoading}
+                            style={{
+                              color: aiLoading ? "#7eb8f7" : "#c8a96e",
+                              borderColor: aiLoading ? "#7eb8f7" : "#c8a96e55",
+                              cursor: aiLoading ? "default" : "pointer",
+                              display: "flex", alignItems: "center", gap: 5,
+                            }}
+                            onClick={() => !aiLoading && analyseTestimonial(t)}>
+                            {aiLoading ? (
+                              <>
+                                <span style={{ width: 10, height: 10, borderRadius: "50%", border: "2px solid #7eb8f7", borderTopColor: "transparent", animation: "spin 0.8s linear infinite", display: "inline-block", flexShrink: 0 }} />
+                                Q{aiLoading.current}/{aiLoading.total}…
+                              </>
+                            ) : hasTranscripts ? "↺ Re-analyse" : "✦ Analyse"}
+                          </button>
+                          {aiErrorMap[t.id] && (
+                            <div style={{ fontSize: "0.75rem", color: "#e05c5c" }}>{aiErrorMap[t.id]}</div>
+                          )}
+                        </>
+                      );
+                    })()}
                     {t.videoURLs && Object.keys(t.videoURLs).length > 0 && (
                       <button className="btn btn-sm btn-primary" onClick={() => { console.log("[vouch/watch] Watch clicked —", t.id, t.clientName); setPlaybackTarget(t); }}>
                         ▶ Watch
