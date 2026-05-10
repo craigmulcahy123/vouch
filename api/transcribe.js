@@ -94,7 +94,9 @@ async function handler(req, res) {
 
     try {
       await downloadFile(storageUrl, tmpPath);
+      const fileSize = fs.statSync(tmpPath).size;
       console.log('[transcribe] download complete, saved to', tmpPath);
+      console.log(`[transcribe] file size: ${fileSize} bytes`);
     } catch (err) {
       if (err && err.noFile) {
         console.log('[transcribe] no file at q' + questionIndex + ' (HTTP ' + err.statusCode + ')');
@@ -108,7 +110,16 @@ async function handler(req, res) {
     let transcript;
     try {
       console.log('[transcribe] sending to Whisper...');
-      const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+      // Connectivity probe — confirms outbound HTTPS to OpenAI is reachable
+      try {
+        const probe = await fetch('https://api.openai.com', { method: 'HEAD' });
+        console.log('[transcribe] OpenAI connectivity probe status:', probe.status);
+      } catch (probeErr) {
+        console.error('[transcribe] OpenAI connectivity probe FAILED:', probeErr.message);
+      }
+
+      const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 55000 });
       const result = await openai.audio.transcriptions.create({
         model: 'whisper-1',
         file: fs.createReadStream(tmpPath),
