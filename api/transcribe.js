@@ -1,11 +1,15 @@
 // Required env vars: FIREBASE_SERVICE_ACCOUNT_KEY, OPENAI_API_KEY
 
+console.log('[transcribe] module loading...');
 const admin = require('firebase-admin');
+console.log('[transcribe] firebase-admin loaded');
 const { OpenAI } = require('openai');
+console.log('[transcribe] openai loaded');
 const https = require('https');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+console.log('[transcribe] all imports loaded');
 
 let _db = null;
 function getDb() {
@@ -43,6 +47,7 @@ function downloadFile(url, dest) {
 
 async function handler(req, res) {
   try {
+    console.log('[transcribe] Function started, OPENAI_API_KEY present:', !!process.env.OPENAI_API_KEY);
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
     // ── Log env var presence (not values) ──────────────────────────────────
