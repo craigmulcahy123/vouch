@@ -1,4 +1,7 @@
 {
+  "functions": {
+    "api/transcribe.js": { "regions": ["fra1"] }
+  },
   "rewrites": [
     { "source": "/record/(.*)", "destination": "/index.html" },
     { "source": "/dashboard", "destination": "/index.html" },
