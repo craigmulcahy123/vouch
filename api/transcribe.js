@@ -124,11 +124,11 @@ async function handler(req, res) {
         console.error('[transcribe] OpenAI connectivity probe FAILED:', probeErr.message);
       }
 
+      const agent = new https.Agent({ keepAlive: false });
       const openai = new OpenAI({
         apiKey: process.env.OPENAI_API_KEY,
-        baseURL: 'https://api.openai.com/v1',
         timeout: 55000,
-        defaultHeaders: { 'Host': 'api.openai.com' },
+        fetchOptions: { agent },
       });
       const result = await openai.audio.transcriptions.create({
         model: 'whisper-1',
