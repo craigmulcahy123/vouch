@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(Test-Path \"C:/Users/craig/vouch/package-lock.json\")",
+      "Bash(node -e \"require\\('form-data'\\); console.log\\('form-data OK'\\)\" --prefix \"C:/Users/craig/vouch\")",
+      "Bash(node -e \"require\\('form-data'\\); console.log\\('form-data OK'\\)\")"
+    ]
+  }
+}

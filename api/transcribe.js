@@ -3,8 +3,6 @@
 console.log('[transcribe] module loading...');
 const admin = require('firebase-admin');
 console.log('[transcribe] firebase-admin loaded');
-const { OpenAI } = require('openai');
-console.log('[transcribe] openai loaded');
 const https = require('https');
 const http = require('http');
 const fs = require('fs');
@@ -115,26 +113,39 @@ async function handler(req, res) {
     let transcript;
     try {
       console.log('[transcribe] sending to Whisper...');
+      const FormData = require('form-data');
 
-      // Connectivity probe — confirms outbound HTTPS to OpenAI is reachable
-      try {
-        const probe = await fetch('https://api.openai.com', { method: 'HEAD' });
-        console.log('[transcribe] OpenAI connectivity probe status:', probe.status);
-      } catch (probeErr) {
-        console.error('[transcribe] OpenAI connectivity probe FAILED:', probeErr.message);
-      }
+      const form = new FormData();
+      form.append('file', fs.createReadStream(tmpPath), {
+        filename: 'audio.mp4',
+        contentType: 'audio/mp4',
+      });
+      form.append('model', 'whisper-1');
 
-      const agent = new https.Agent({ keepAlive: false });
-      const openai = new OpenAI({
-        apiKey: process.env.OPENAI_API_KEY,
-        timeout: 55000,
-        fetchOptions: { agent },
+      const whisperRes = await new Promise((resolve, reject) => {
+        const formHeaders = form.getHeaders();
+        const options = {
+          hostname: 'api.openai.com',
+          path: '/v1/audio/transcriptions',
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+            ...formHeaders,
+          },
+        };
+        const req = https.request(options, resolve);
+        req.on('error', reject);
+        form.pipe(req);
       });
-      const result = await openai.audio.transcriptions.create({
-        model: 'whisper-1',
-        file: fs.createReadStream(tmpPath),
-      });
-      transcript = result.text;
+
+      const chunks = [];
+      for await (const chunk of whisperRes) chunks.push(chunk);
+      const body = Buffer.concat(chunks).toString();
+      console.log('[transcribe] Whisper response status:', whisperRes.statusCode);
+
+      const whisperData = JSON.parse(body);
+      if (!whisperData.text) throw new Error(`Whisper error: ${body}`);
+      transcript = whisperData.text;
       console.log('[transcribe] Whisper done, transcript length:', transcript.length);
     } catch (err) {
       console.error('[transcribe] Whisper failed:', err.message, err.stack);
