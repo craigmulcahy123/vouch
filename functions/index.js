@@ -7,6 +7,7 @@ const ffmpegPath = require("@ffmpeg-installer/ffmpeg").path;
 const fetch  = require("node-fetch");
 const { Anthropic } = require("@anthropic-ai/sdk");
 const { Resend } = require("resend");
+const https = require("https");
 const os   = require("os");
 const path = require("path");
 const fs   = require("fs");
@@ -31,7 +32,7 @@ exports.processTestimonial = onDocumentWritten(
     timeoutSeconds: 540,
     memory: "2GiB",
     region: "us-central1",
-    secrets: ["ANTHROPIC_API_KEY", "RESEND_API_KEY"],
+    secrets: ["ANTHROPIC_API_KEY", "RESEND_API_KEY", "OPENAI_API_KEY"],
   },
   async (event) => {
     const { userId, testimonialId } = event.params;
@@ -131,25 +132,36 @@ exports.processTestimonial = onDocumentWritten(
           const wavBuffer = fs.readFileSync(wavPath);
           console.log(`[processTestimonial] WAV Q${qIdx}: ${(wavBuffer.length / 1024).toFixed(0)} KB`);
 
-          if (wavBuffer.length > 8 * 1024 * 1024) {
-            console.warn(`[processTestimonial] WAV too large for Q${qIdx}, using text answer`);
-            transcripts[qIdx] = data.answers?.[qIdx] || "";
-          } else {
-            const wavBase64 = wavBuffer.toString("base64");
-            const response = await anthropic.messages.create({
-              model: "claude-opus-4-6",
-              max_tokens: 1024,
-              messages: [{
-                role: "user",
-                content: [
-                  { type: "audio", source: { type: "base64", media_type: "audio/wav", data: wavBase64 } },
-                  { type: "text", text: "Transcribe this audio exactly. Return only the transcript with timestamps in format [0:00] text" },
-                ],
-              }],
+          const FormData = require("form-data");
+
+          const form = new FormData();
+          form.append("file", fs.createReadStream(wavPath), {
+            filename: "audio.wav",
+            contentType: "audio/wav",
+          });
+          form.append("model", "whisper-1");
+
+          const whisperResult = await new Promise((resolve, reject) => {
+            const formHeaders = form.getHeaders();
+            const req = https.request({
+              hostname: "api.openai.com",
+              path: "/v1/audio/transcriptions",
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+                ...formHeaders,
+              },
+            }, (res) => {
+              const chunks = [];
+              res.on("data", chunk => chunks.push(chunk));
+              res.on("end", () => resolve(JSON.parse(Buffer.concat(chunks).toString())));
             });
-            transcripts[qIdx] = response.content[0]?.text || data.answers?.[qIdx] || "";
-            console.log(`[processTestimonial] transcribed Q${qIdx}: "${transcripts[qIdx].substring(0, 100)}..."`);
-          }
+            req.on("error", reject);
+            form.pipe(req);
+          });
+
+          transcripts[qIdx] = whisperResult.text || data.answers?.[qIdx] || "";
+          console.log(`[processTestimonial] transcribed Q${qIdx}: "${(transcripts[qIdx] || "").substring(0, 100)}..."`);
         } catch (e) {
           console.warn(`[processTestimonial] transcription failed Q${qIdx}:`, e.message);
           transcripts[qIdx] = data.answers?.[qIdx] || "";
