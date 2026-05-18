@@ -63,9 +63,11 @@ function initFirebase() {
   window.__firebaseLoading = true;
 
   function load(src) {
-    return new Promise(res => {
+    return new Promise((res, rej) => {
       const s = document.createElement("script");
-      s.src = src; s.onload = res;
+      s.src = src;
+      s.onload = res;
+      s.onerror = () => rej(new Error("Failed to load Firebase script: " + src));
       document.head.appendChild(s);
     });
   }
@@ -83,6 +85,9 @@ function initFirebase() {
     window._firebaseAuth = _auth; // exposed for diagnostic logging only
     _fbReady = true;
     _fbCallbacks.forEach(cb => cb(_auth, _storage, _db));
+    _fbCallbacks = [];
+  }).catch(err => {
+    console.error("[vouch/firebase] ❌ Firebase initialisation failed:", err.message);
     _fbCallbacks = [];
   });
 }
@@ -4817,8 +4822,6 @@ function UserMenu({ user, auth }) {
 }
 
 // ── Root App ──────────────────────────────────────────────────────────────────
-const DEMO_USER = { uid: "demo", email: "demo@vouch.app", displayName: "Demo User" };
-
 // ── Pricing data (EUR base) ────────────────────────────────────────────────────
 const CURRENCIES_MAP = {
   EU: { symbol: "€", flag: "🇪🇺", rate: 1 },
@@ -5273,10 +5276,16 @@ function InAppPricing({ onGetStarted, activeUser }) {
 
 function App() {
   const { user, auth, storage, db, loading } = useAuth();
-  const [demoMode, setDemoMode] = useState(false);
+  const [connectTimeout, setConnectTimeout] = useState(false);
   const [view, setView] = useState("pricing"); // start on pricing
   const [previewCampaign, setPreviewCampaign] = useState(null);
   const [upgradedBanner, setUpgradedBanner] = useState(false);
+
+  useEffect(() => {
+    if (!loading) return;
+    const t = setTimeout(() => setConnectTimeout(true), 10000);
+    return () => clearTimeout(t);
+  }, [loading]);
 
   // Redirect to dashboard when returning from Stripe Checkout success URL
   const _upgradedParam = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('upgraded') === 'true';
@@ -5410,7 +5419,7 @@ function App() {
     );
   }
 
-  const activeUser = demoMode ? DEMO_USER : user;
+  const activeUser = user;
 
   function handlePreview(campaign) {
     setPreviewCampaign(campaign);
@@ -5418,16 +5427,21 @@ function App() {
   }
 
   // Loading state
-  if (loading && !demoMode) {
+  if (loading) {
     return (
       <>
         <style>{style}</style>
         <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--paper)" }}>
           <div style={{ textAlign: "center" }}>
             <div style={{ fontFamily: "Instrument Serif, serif", fontSize: "1.8rem", color: "var(--gold)", fontStyle: "italic", marginBottom: 24 }}>Vouch✦</div>
-            <div className="ai-spinner" style={{ margin: "0 auto 24px", borderTopColor: "#c8a96e", borderColor: "#ddd8cc" }} />
-            <div style={{ color: "var(--muted)", fontSize: "0.85rem", marginBottom: 20 }}>Connecting…</div>
-            <button className="btn btn-gold" onClick={() => setDemoMode(true)}>Try Demo Instead →</button>
+            {connectTimeout ? (
+              <div style={{ color: "#c0392b", fontSize: "0.9rem" }}>Connection failed — please refresh</div>
+            ) : (
+              <>
+                <div className="ai-spinner" style={{ margin: "0 auto 16px", borderTopColor: "#c8a96e", borderColor: "#ddd8cc" }} />
+                <div style={{ color: "var(--muted)", fontSize: "0.85rem" }}>Connecting…</div>
+              </>
+            )}
           </div>
         </div>
       </>
@@ -5440,9 +5454,6 @@ function App() {
       <>
         <style>{style}</style>
         <InAppPricing onGetStarted={() => setView("auth")} activeUser={null} />
-        <div style={{ position: "fixed", bottom: 20, right: 20, zIndex: 50 }}>
-          <button className="btn btn-gold btn-sm" onClick={() => setDemoMode(true)}>✦ Try Demo</button>
-        </div>
       </>
     );
   }
@@ -5454,9 +5465,8 @@ function App() {
         <style>{style}</style>
         <div style={{ position: "relative" }}>
           <AuthScreen auth={auth} />
-          <div style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", zIndex: 50, display: "flex", gap: 10 }}>
+          <div style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", zIndex: 50 }}>
             <button className="btn btn-outline" style={{ background: "var(--paper)", fontSize: "0.82rem" }} onClick={() => setView("pricing")}>← Pricing</button>
-            <button className="btn btn-outline" style={{ background: "var(--paper)", fontSize: "0.82rem" }} onClick={() => setDemoMode(true)}>✦ Skip — try demo</button>
           </div>
         </div>
       </>
@@ -5474,7 +5484,7 @@ function App() {
               <button className="btn btn-outline btn-sm" onClick={() => setView("dashboard")}>← Back to Dashboard</button>
             </div>
             <div style={{ paddingTop: 56 }}>
-              <InAppPricing onGetStarted={() => setView("dashboard")} activeUser={demoMode ? null : activeUser} />
+              <InAppPricing onGetStarted={() => setView("dashboard")} activeUser={activeUser} />
             </div>
           </>
         ) : view === "client" ? (
@@ -5489,14 +5499,7 @@ function App() {
                   <button className="nav-tab" onClick={() => handlePreview(null)}>Client View</button>
                 </div>
               </div>
-              {demoMode ? (
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <span style={{ fontSize: "0.75rem", color: "var(--muted)", background: "var(--cream)", padding: "4px 10px", borderRadius: 20 }}>Demo mode</span>
-                  <button className="btn btn-outline btn-sm" onClick={() => { setDemoMode(false); setView("auth"); }}>Sign in</button>
-                </div>
-              ) : (
-                <UserMenu user={activeUser} auth={auth} />
-              )}
+              <UserMenu user={activeUser} auth={auth} />
             </nav>
             {upgradedBanner && (
               <div style={{ margin: "16px 20px 0", padding: "13px 18px", background: "#f0fdf4", border: "1px solid #86efac", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
