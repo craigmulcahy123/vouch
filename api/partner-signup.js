@@ -149,7 +149,7 @@ function buildWelcomeEmailHTML({ firstName, company }) {
                   <tr>
                     <td style="vertical-align:top;">
                       <p style="margin:0 0 4px;font-size:13px;font-weight:700;color:#0e0e0e;">3. Earn</p>
-                      <p style="margin:0;font-size:12px;color:#9a9080;line-height:1.5;">Start earning 20–35% recurring commission on every account you refer.</p>
+                      <p style="margin:0;font-size:12px;color:#9a9080;line-height:1.5;">Start earning 15–25% recurring commission on every account you refer.</p>
                     </td>
                   </tr>
                 </table>

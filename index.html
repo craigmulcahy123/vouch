@@ -3440,10 +3440,9 @@ function PartnerDashboard({ userId, partnerStats, db }) {
   const referralLink = `https://vouchbusiness.com?ref=${userId}`;
 
   const TIERS = [
-    { min: 1,  max: 4,  rate: 20, label: "Bronze",   medal: "🥉" },
-    { min: 5,  max: 9,  rate: 25, label: "Silver",   medal: "🥈" },
-    { min: 10, max: 19, rate: 30, label: "Gold",     medal: "🥇" },
-    { min: 20, max: Infinity, rate: 35, label: "Platinum", medal: "💎" },
+    { min: 1,  max: 4,        rate: 15, label: "Bronze", medal: "🥉" },
+    { min: 5,  max: 9,        rate: 20, label: "Silver", medal: "🥈" },
+    { min: 10, max: Infinity, rate: 25, label: "Gold",   medal: "🥇" },
   ];
   const { referralCount, totalEarnings, pendingPayout, commissions } = partnerStats;
   const tier = TIERS.find(t => referralCount >= t.min && referralCount <= t.max) || TIERS[0];
@@ -3551,7 +3550,7 @@ function PartnerDashboard({ userId, partnerStats, db }) {
                 );
               })}
             </div>
-            {tier.label !== "Platinum" && (
+            {tier.label !== "Gold" && (
               <div style={{ fontSize: "0.8rem", color: "var(--muted)", marginTop: 6 }}>
                 {(() => {
                   const nextTier = TIERS[TIERS.indexOf(tier) + 1];
@@ -3657,11 +3656,11 @@ function PartnerDashboard({ userId, partnerStats, db }) {
             <div style={{ fontSize: "0.82rem", color: "var(--muted)", paddingBottom: 12 }}>Updated monthly · anonymised display names</div>
           </div>
           {[
-            { rank: 1, name: "S.M.", company: "Scale Digital",      referrals: 47, tier: "💎 Platinum" },
-            { rank: 2, name: "P.R.", company: "GrowthLab Agency",   referrals: 31, tier: "💎 Platinum" },
-            { rank: 3, name: "D.K.", company: "Momentum Consulting",referrals: 24, tier: "💎 Platinum" },
+            { rank: 1, name: "S.M.", company: "Scale Digital",      referrals: 47, tier: "🥇 Gold" },
+            { rank: 2, name: "P.R.", company: "GrowthLab Agency",   referrals: 31, tier: "🥇 Gold" },
+            { rank: 3, name: "D.K.", company: "Momentum Consulting",referrals: 24, tier: "🥇 Gold" },
             { rank: 4, name: "A.T.", company: "BrandForge",         referrals: 18, tier: "🥇 Gold" },
-            { rank: 5, name: "R.B.", company: "Clearpath Agency",   referrals: 14, tier: "🥇 Gold" },
+            { rank: 5, name: "R.B.", company: "Clearpath Agency",   referrals: 14, tier: "🥈 Silver" },
           ].map(({ rank, name, company, referrals, tier: t }) => (
             <div key={rank} style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 24px", borderBottom: "1px solid var(--border)" }}>
               <div style={{ width: 28, height: 28, borderRadius: "50%", background: rank <= 3 ? "rgba(200,169,110,0.15)" : "var(--cream)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: rank <= 3 ? "0.95rem" : "0.78rem", fontWeight: 700, color: rank <= 3 ? "var(--gold)" : "var(--muted)", flexShrink: 0 }}>

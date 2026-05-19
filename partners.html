@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Vouch Partner Program — Earn 20–35% Recurring Commission</title>
-  <meta name="description" content="Join the Vouch Partner Program and earn recurring commissions for every business you refer. Bronze to Platinum tiers with up to 35% commission." />
+  <title>Vouch Partner Program — Earn 15–25% Recurring Commission</title>
+  <meta name="description" content="Join the Vouch Partner Program and earn recurring commissions for every business you refer. Bronze to Gold tiers with up to 25% commission." />
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%230e0e0e'/><text y='.9em' font-size='70' x='50%' text-anchor='middle' dominant-baseline='middle' dy='0.1em' fill='%23c8a96e' font-family='serif' font-weight='bold'>V</text></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -140,22 +140,14 @@
 
     /* ── Tier table ── */
     .tier-section { background: #0a0a0a; }
-    .tier-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 52px; }
-    @media (max-width: 800px) { .tier-grid { grid-template-columns: repeat(2, 1fr); } }
-    @media (max-width: 480px) { .tier-grid { grid-template-columns: 1fr; } }
+    .tier-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 52px; }
+    @media (max-width: 640px) { .tier-grid { grid-template-columns: 1fr; } }
     .tier-card {
       background: #111; border: 1px solid #1e1e1e; border-radius: 16px;
       padding: 28px 24px; text-align: center; position: relative; overflow: hidden;
       transition: border-color 0.2s, transform 0.2s;
     }
     .tier-card:hover { border-color: rgba(200,169,110,0.4); transform: translateY(-2px); }
-    .tier-card.featured { border-color: var(--gold); }
-    .tier-card.featured::before {
-      content: 'Most Popular'; position: absolute; top: 0; left: 50%; transform: translateX(-50%);
-      background: var(--gold); color: var(--ink); font-size: 0.65rem; font-weight: 700;
-      text-transform: uppercase; letter-spacing: 0.1em; padding: 3px 14px;
-      border-radius: 0 0 8px 8px;
-    }
     .tier-medal { font-size: 2.2rem; margin-bottom: 10px; }
     .tier-name { font-size: 1rem; font-weight: 700; margin-bottom: 4px; }
     .tier-threshold { font-size: 0.78rem; color: #666; margin-bottom: 16px; }
@@ -394,7 +386,7 @@
   <!-- ── Hero ── -->
   <section class="hero">
     <div class="hero-badge"><span></span> Partner Program</div>
-    <h1>Earn <em>20–35%</em><br>recurring commission</h1>
+    <h1>Earn <em>15–25%</em><br>recurring commission</h1>
     <p class="hero-sub">Refer agencies, coaches, and growing businesses to Vouch and earn a lifetime commission on every account — as long as they stay subscribed.</p>
     <div class="hero-ctas">
       <button class="btn-gold" onclick="openModal()">Apply Now — It's Free</button>
@@ -405,7 +397,7 @@
   <!-- ── Stats bar ── -->
   <div class="stats-bar">
     <div class="stat-item">
-      <div class="stat-num">35%</div>
+      <div class="stat-num">25%</div>
       <div class="stat-label">Max commission rate</div>
     </div>
     <div class="stat-item">
@@ -462,7 +454,7 @@
           <div class="tier-medal">🥉</div>
           <div class="tier-name">Bronze</div>
           <div class="tier-threshold">1–4 active referrals</div>
-          <div class="tier-rate">20%</div>
+          <div class="tier-rate">15%</div>
           <div class="tier-rate-label">recurring commission</div>
           <ul class="tier-perks">
             <li>Unique referral link</li>
@@ -475,7 +467,7 @@
           <div class="tier-medal">🥈</div>
           <div class="tier-name">Silver</div>
           <div class="tier-threshold">5–9 active referrals</div>
-          <div class="tier-rate">25%</div>
+          <div class="tier-rate">20%</div>
           <div class="tier-rate-label">recurring commission</div>
           <ul class="tier-perks">
             <li>Everything in Bronze</li>
@@ -484,30 +476,17 @@
             <li>Featured in directory</li>
           </ul>
         </div>
-        <div class="tier-card featured">
+        <div class="tier-card">
           <div class="tier-medal">🥇</div>
           <div class="tier-name">Gold</div>
-          <div class="tier-threshold">10–19 active referrals</div>
-          <div class="tier-rate">30%</div>
+          <div class="tier-threshold">10+ active referrals</div>
+          <div class="tier-rate">25%</div>
           <div class="tier-rate-label">recurring commission</div>
           <ul class="tier-perks">
             <li>Everything in Silver</li>
             <li>Dedicated account manager</li>
             <li>Custom landing page</li>
             <li>Co-branded proposals</li>
-          </ul>
-        </div>
-        <div class="tier-card">
-          <div class="tier-medal">💎</div>
-          <div class="tier-name">Platinum</div>
-          <div class="tier-threshold">20+ active referrals</div>
-          <div class="tier-rate">35%</div>
-          <div class="tier-rate-label">recurring commission</div>
-          <ul class="tier-perks">
-            <li>Everything in Gold</li>
-            <li>Quarterly strategy calls</li>
-            <li>Early feature access</li>
-            <li>Revenue share bonuses</li>
           </ul>
         </div>
       </div>
@@ -534,14 +513,14 @@
         </div>
 
         <div class="calc-result">
-          <div class="calc-tier-badge" id="calc-tier-badge">🥇 Gold tier · 30%</div>
-          <div class="calc-monthly" id="calc-monthly">€447</div>
+          <div class="calc-tier-badge" id="calc-tier-badge">🥇 Gold tier · 25%</div>
+          <div class="calc-monthly" id="calc-monthly">€373</div>
           <div class="calc-monthly-label">per month</div>
-          <div class="calc-yearly" id="calc-yearly">€5,364 / year</div>
+          <div class="calc-yearly" id="calc-yearly">€4,470 / year</div>
           <div class="calc-yearly-label">recurring income</div>
           <div class="calc-breakdown" id="calc-breakdown">
             10 referrals × €149 avg = €1,490 MRR<br>
-            Gold tier commission: 30%
+            Gold tier commission: 25%
           </div>
         </div>
       </div>
@@ -610,10 +589,10 @@
         </div>
         <div class="quote-card">
           <div class="quote-stars">★★★★★</div>
-          <div class="quote-text">"We've referred 24 clients and earn over €2,100/month at Platinum tier. It's become a meaningful revenue line for our consultancy."</div>
+          <div class="quote-text">"We've referred 24 clients and it's become a meaningful revenue line for our consultancy. The recurring commissions add up fast."</div>
           <div class="quote-author">Priya R.</div>
           <div class="quote-role">Digital Strategy Consultancy, London</div>
-          <div class="quote-tier">💎 Platinum Partner</div>
+          <div class="quote-tier">🥇 Gold Partner</div>
         </div>
       </div>
     </div>
@@ -651,7 +630,7 @@
             How do I move up tiers?
             <div class="faq-chevron">▾</div>
           </button>
-          <div class="faq-answer"><p>Tier upgrades are automatic and happen at the start of each month based on your total active referrals. If you have 10 or more active subscribers who came through your link, you'll be bumped to Gold. Downgrading works the same way — if referrals churn, your tier adjusts accordingly.</p></div>
+          <div class="faq-answer"><p>Tier upgrades are automatic and happen at the start of each month based on your total active referrals. Bronze starts at 1 referral (15%), Silver at 5 (20%), and Gold at 10+ (25%). Downgrading works the same way — if referrals churn, your tier adjusts accordingly.</p></div>
         </div>
         <div class="faq-item">
           <button class="faq-question" onclick="toggleFaq(this)">
@@ -804,10 +783,9 @@
 
     // ── Calculator ──
     const TIERS = [
-      { min: 1,  max: 4,  rate: 0.20, label: '🥉 Bronze · 20%',   name: 'Bronze'   },
-      { min: 5,  max: 9,  rate: 0.25, label: '🥈 Silver · 25%',   name: 'Silver'   },
-      { min: 10, max: 19, rate: 0.30, label: '🥇 Gold · 30%',     name: 'Gold'     },
-      { min: 20, max: Infinity, rate: 0.35, label: '💎 Platinum · 35%', name: 'Platinum' },
+      { min: 1,  max: 4,        rate: 0.15, label: '🥉 Bronze · 15%', name: 'Bronze' },
+      { min: 5,  max: 9,        rate: 0.20, label: '🥈 Silver · 20%', name: 'Silver' },
+      { min: 10, max: Infinity, rate: 0.25, label: '🥇 Gold · 25%',   name: 'Gold'   },
     ];
 
     function getTier(refs) {
