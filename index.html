@@ -328,11 +328,12 @@ const style = `
   }
   .video-modal {
     background: #111; border-radius: 16px; padding: 28px; max-width: 700px; width: 100%;
+    max-height: 90vh; display: flex; flex-direction: column; overflow: hidden;
     animation: modalIn 0.2s ease;
   }
-  .video-modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  .video-modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-shrink: 0; }
   .video-modal-title { font-family: 'Instrument Serif', serif; font-size: 1.2rem; color: #fff; }
-  .video-modal video { width: 100%; border-radius: 10px; background: #000; display: block; }
+  .video-modal video { width: 100%; max-height: 400px; border-radius: 10px; background: #000; display: block; object-fit: contain; flex-shrink: 0; }
   .video-clip-tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
   .video-clip-tab {
     padding: 6px 14px; border-radius: 20px; border: 1px solid #333;
@@ -2703,8 +2704,6 @@ function VideoPlaybackModal({ testimonial, onClose }) {
   }
 
   const prompts = testimonial.prompts || [];
-  const transcripts = testimonial.transcripts || {};
-  const transcriptText = activeIdx !== null ? transcripts[activeIdx]?.text : null;
 
   const [activeIdx, setActiveIdx] = useState(keys[0] ?? null);
   const [loading, setLoading]     = useState(false);
@@ -2879,7 +2878,7 @@ function VideoPlaybackModal({ testimonial, onClose }) {
         </div>
 
         {keys.length > 1 && (
-          <div className="video-clip-tabs">
+          <div className="video-clip-tabs" style={{ flexShrink: 0 }}>
             {keys.map(idx => {
               const label = idx === "highlight" ? "⚡ AI Highlight"
                 : idx === "q0" ? "Q1" : idx === "q1" ? "Q2" : idx === "q2" ? "Q3" : idx === "q3" ? "Q4"
@@ -2902,7 +2901,7 @@ function VideoPlaybackModal({ testimonial, onClose }) {
         )}
 
         {/* Video player */}
-        <div style={{ position: "relative", borderRadius: 10, overflow: "hidden", background: "#000", minHeight: 180 }}>
+        <div style={{ position: "relative", borderRadius: 10, overflow: "hidden", background: "#000", minHeight: 180, maxHeight: 400, flexShrink: 0 }}>
           {/* Spinner while Firebase URL is being refreshed */}
           {loading && (
             <div style={{
@@ -2983,31 +2982,20 @@ function VideoPlaybackModal({ testimonial, onClose }) {
         </div>
 
         {activeIdx === "highlight" && testimonial.clipReason && (
-          <div style={{ marginTop: 10, padding: "10px 14px", background: "#111", borderRadius: 8, border: "1px solid #222", fontSize: "0.82rem", color: "#888", lineHeight: 1.5 }}>
+          <div style={{ marginTop: 10, padding: "10px 14px", background: "#111", borderRadius: 8, border: "1px solid #222", fontSize: "0.82rem", color: "#888", lineHeight: 1.5, flexShrink: 0 }}>
             <span style={{ color: "#c8a96e", fontWeight: 600 }}>⚡ AI selected this moment because: </span>
             {testimonial.clipReason}
           </div>
         )}
         {activeIdx !== null && /^q(\d)$/.test(activeIdx) && prompts[Number(activeIdx[1])] && (
-          <div style={{ marginTop: 14, color: "#888", fontSize: "0.85rem", lineHeight: 1.5 }}>
+          <div style={{ marginTop: 14, color: "#888", fontSize: "0.85rem", lineHeight: 1.5, flexShrink: 0 }}>
             <span style={{ color: "var(--gold)", fontWeight: 600 }}>Q: </span>{prompts[Number(activeIdx[1])]}
           </div>
         )}
         {activeIdx !== null && /^q(\d)$/.test(activeIdx) && testimonial.transcripts?.[activeIdx[1]]?.text && (
-          <div style={{ marginTop: 12, padding: "12px 16px", background: "#111", borderRadius: 8, border: "1px solid #2c2c2c" }}>
-            <div style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--gold)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.06em" }}>Transcript</div>
-            <div style={{ fontSize: "0.85rem", color: "#b0aaa0", lineHeight: 1.6 }}>{testimonial.transcripts[activeIdx[1]].text}</div>
-          </div>
-        )}
-
-        {transcriptText && (
-          <div style={{ marginTop: 12, padding: "12px 14px", background: "#161616", border: "1px solid #2c2c2c", borderRadius: 8 }}>
-            <div style={{ color: "var(--gold)", fontSize: "0.7rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 6 }}>
-              AI Transcript
-            </div>
-            <div style={{ color: "#bbb", fontSize: "0.85rem", lineHeight: 1.55, whiteSpace: "pre-wrap" }}>
-              {transcriptText}
-            </div>
+          <div style={{ marginTop: 12, padding: "12px 16px", background: "#111", borderRadius: 8, border: "1px solid #2c2c2c", display: "flex", flexDirection: "column", minHeight: 0, flex: "1 1 auto" }}>
+            <div style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--gold)", marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.06em", flexShrink: 0 }}>AI Transcript</div>
+            <div style={{ fontSize: "0.85rem", color: "#b0aaa0", lineHeight: 1.6, overflowY: "auto", minHeight: 0, whiteSpace: "pre-wrap" }}>{testimonial.transcripts[activeIdx[1]].text}</div>
           </div>
         )}
       </div>
